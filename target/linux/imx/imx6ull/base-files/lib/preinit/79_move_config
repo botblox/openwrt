@@ -1,0 +1,32 @@
+. /lib/imx.sh
+. /lib/functions.sh
+. /lib/upgrade/common.sh
+
+# TODO: deduplicate from /lib/upgrade/platform.sh
+botblox_imx_emmc_mount_boot() {
+	mkdir -p /boot
+	[ -f /boot/zImage ] || {
+		mount -o rw,noatime $(bootpart_from_uuid) /boot > /dev/null
+	}
+}
+
+botblox_imx_emmc_move_config() {
+	if [ -b $(bootpart_from_uuid) ]; then
+		botblox_imx_emmc_mount_boot
+		[ -f "/boot/$BACKUP_FILE" ] && mv -f "/boot/$BACKUP_FILE" /
+		umount /boot
+	fi
+}
+
+
+move_config() {
+	local board=$(board_name)
+
+	case "$board" in
+	botblox,ruggedsom)
+		botblox_imx_emmc_move_config
+		;;
+	esac
+}
+
+boot_hook_add preinit_mount_root move_config
