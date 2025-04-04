@@ -1,0 +1,44 @@
+# BotBlox-specific release flow
+
+## Quickstart
+
+1. Run `./scripts/feeds update -a` to obtain all the latest package definitions
+   defined in feeds.conf / feeds.conf.default
+
+2. Run `./scripts/feeds install -a` to install symlinks for all obtained
+   packages into package/feeds/
+
+3. Follow instructions [here](https://github.com/botblox/luci-theme-botblox/blob/master/README.md) to make custom BotBlox Luci theme available
+
+4. Run `make menuconfig` to select your preferred configuration for the toolchain, target system & firmware packages.
+
+5. You must select the following target, subtarget and profile
+
+```
+CONFIG_TARGET_imx=y
+CONFIG_TARGET_imx_imx6ull=y
+CONFIG_TARGET_imx_imx6ull_DEVICE_botblox_ruggedsom=y
+CONFIG_TARGET_BOARD="imx"
+CONFIG_TARGET_SUBTARGET="imx6ull"
+CONFIG_TARGET_PROFILE="DEVICE_botblox_ruggedsom"
+```
+
+6. Run `make` to build your firmware. This will download all sources, build the
+   cross-compile toolchain and then cross-compile the GNU/Linux kernel & all chosen
+   applications for your target system.
+
+## Release flow
+
+We need to add the following to every release.
+
+- u-boot.imx binary
+- kernel binary (zImage) used in boot partition
+- device tree blob used in boot partition
+- rootfs cpio and tar archives
+- partitioned image file containing uboot bootloader binary, boot partition (kernel/device tree blob) and rootfs
+
+In future, we may simplify things by just using a FIT image.
+
+## License
+
+OpenWrt is licensed under GPL-2.0

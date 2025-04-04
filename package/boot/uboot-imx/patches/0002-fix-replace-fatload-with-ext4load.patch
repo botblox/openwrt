@@ -1,0 +1,35 @@
+From ca9f1b54f0022a69feea4d2c641e2da5cef1f25b Mon Sep 17 00:00:00 2001
+From: AaronElijah <aaronzakelijah@googlemail.com>
+Date: Mon, 10 Mar 2025 13:29:26 +0000
+Subject: [PATCH] fix: replace fatload with ext4load
+
+- Default OpenWRT build uses ext4 fs for both boot and root partitions, as opposed to yocto BloxOs distro build which use FAT32 partition for boot
+- Perhaps in future, we can typically choose the loading env vals based on a runtime check for which filesystem is being used
+---
+ include/configs/switchbloxrugged_som.h | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/include/configs/switchbloxrugged_som.h b/include/configs/switchbloxrugged_som.h
+index b706dce874e..b36f3aa9ade 100755
+--- a/include/configs/switchbloxrugged_som.h
++++ b/include/configs/switchbloxrugged_som.h
+@@ -97,12 +97,12 @@
+                                                  "mmcargs=setenv bootargs console=${console},${baudrate} " BOOTARGS_CMA_SIZE \
+                                                  "root=${mmcroot}\0"                                                         \
+                                                  "loadbootscript="                                                           \
+-                                                 "fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} ${script};\0"                 \
++                                                 "ext4load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${script};\0"                 \
+                                                  "bootscript=echo Running bootscript from mmc ...; "                         \
+                                                  "source\0"                                                                  \
+-                                                 "loadimage=fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} ${image}\0"         \
+-                                                 "loadfdt=fatload mmc ${mmcdev}:${mmcpart} ${fdt_addr} ${fdt_file}\0"        \
+-                                                 "loadtee=fatload mmc ${mmcdev}:${mmcpart} ${tee_addr} ${tee_file}\0"        \
++                                                 "loadimage=ext4load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${image}\0"         \
++                                                 "loadfdt=ext4load mmc ${mmcdev}:${mmcpart} ${fdt_addr} ${fdt_file}\0"        \
++                                                 "loadtee=ext4load mmc ${mmcdev}:${mmcpart} ${tee_addr} ${tee_file}\0"        \
+                                                  "mmcboot=echo Booting from mmc ...; "                                       \
+                                                  "run mmcargs; "                                                             \
+                                                  "if test ${tee} = yes; then "                                               \
+-- 
+2.48.1
+

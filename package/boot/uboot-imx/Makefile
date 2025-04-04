@@ -7,10 +7,17 @@
 
 include $(TOPDIR)/rules.mk
 
-PKG_VERSION:=2022.01
-PKG_RELEASE:=5
+# PKG_VERSION:=2022.01
+# PKG_RELEASE:=5
+# PKG_HASH:=81b4543227db228c03f8a1bf5ddbc813b0bb8f6555ce46064ef721a6fc680413
 
-PKG_HASH:=81b4543227db228c03f8a1bf5ddbc813b0bb8f6555ce46064ef721a6fc680413
+PKG_NAME:=uboot-imx
+PKG_VERSION:=lf_v2024.04
+PKG_RELEASE:=1
+
+PKG_SOURCE_PROTO:=git
+PKG_SOURCE_URL:=https://github.com/nxp-imx/uboot-imx
+PKG_SOURCE_VERSION:=lf_v2024.04
 
 include $(INCLUDE_DIR)/u-boot.mk
 include $(INCLUDE_DIR)/package.mk
@@ -50,11 +57,20 @@ define U-Boot/wandboard
   BUILD_DEVICES:=wandboard_dual
 endef
 
+define U-Boot/ruggedsom
+  NAME:=BotBlox Rugged SOM eMMC
+  BUILD_SUBTARGET:=imx6ull
+  BUILD_DEVICES:=ruggedsom
+  UBOOT_CONFIG:=botblox_swr_som_emmc
+  DTB_NAME:=imx6ull-botblox-swr-som-emmc
+endef
+
 UBOOT_TARGETS := \
 	apalis_imx6 \
 	mx6cuboxi \
 	pico-pi-imx7d \
-	wandboard
+	wandboard \
+  ruggedsom
 
 UBOOT_MAKE_FLAGS += u-boot.imx
 

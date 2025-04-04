@@ -1,0 +1,2 @@
+# <file system> <mount point> <type> <options> <dump> <pass>
+/dev/mmcblk1p1 /boot ext4 rw,noatime 0 2
