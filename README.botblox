@@ -4,28 +4,96 @@
 
 1. Run `./scripts/feeds update -a` to obtain all the latest package definitions
    defined in feeds.conf / feeds.conf.default
-
 2. Run `./scripts/feeds install -a` to install symlinks for all obtained
    packages into package/feeds/
-
 3. Follow instructions [here](https://github.com/botblox/luci-theme-botblox/blob/master/README.md) to make custom BotBlox Luci theme available
-
 4. Run `make menuconfig` to select your preferred configuration for the toolchain, target system & firmware packages.
-
 5. You must select the following target, subtarget and profile
 
 ```
 CONFIG_TARGET_imx=y
-CONFIG_TARGET_imx_imx6ull=y
-CONFIG_TARGET_imx_imx6ull_DEVICE_botblox_ruggedsom=y
+CONFIG_TARGET_imx_cortexa7=y
+CONFIG_TARGET_imx_cortexa7_DEVICE_botblox_ruggedsom=y
 CONFIG_TARGET_BOARD="imx"
-CONFIG_TARGET_SUBTARGET="imx6ull"
+CONFIG_TARGET_SUBTARGET="cortexa7"
 CONFIG_TARGET_PROFILE="DEVICE_botblox_ruggedsom"
 ```
 
 6. Run `make` to build your firmware. This will download all sources, build the
    cross-compile toolchain and then cross-compile the GNU/Linux kernel & all chosen
    applications for your target system.
+
+## Manual upgrade (U-Boot + TFTP)
+
+This method flashes the full eMMC image and will erase existing settings on the board.
+We are working on a sysupgrade-based release later.
+
+1. Build an eMMC image and locate the `openwrt-{release}-{version_code}-imx-imx6ull-botblox_ruggedsom-ext4-emmc.img` artifact. If you are building from source, search `bin/targets/imx/cortexa7`.
+2. Copy the image into your TFTP server root (often `/var/lib/tftpboot/` or `/srv/tftp/` on Linux) and ensure a TFTP server is running. Please see [this example](https://docs.fedoraproject.org/en-US/fedora/f36/install-guide/advanced/Network_based_Installations/#pxe-tftpd) on Fedora Linux
+3. Boot the board and interrupt autoboot to enter the U-Boot shell.
+4. Load the image into RAM:
+
+   ```
+   env set serverip ${host_machine_ip}
+   tftpboot ${loadaddr} openwrt-{release}-{version_code}-imx-imx6ull-botblox_ruggedsom-ext4-emmc.img
+   ```
+
+5. Calculate the block count of 512-byte blocks:
+
+   ```
+   setexpr blkcnt ${filesize} + 0x1ff
+   setexpr blkcnt ${blkcnt} / 0x200
+   ```
+
+6. Flash to eMMC starting at LBA 0 to overwrite partitions 1 & 2 (boot & root):
+
+   ```
+   mmc write ${loadaddr} 0 ${blkcnt}
+   ```
+
+7. Reset the board and continue booting
+   
+   ```
+   reset
+   ```
+
+## Installing a locally built kernel module (.ipk)
+
+Kernel module packages must be built against the exact same kernel version/config as the firmware running on the board. We provide an OpenWRT SDK. You can also use our OpenWRT fork
+
+1. Build the desired kernel module package in your OpenWrt tree:
+
+   ```
+   # build just the package you want
+   make package/<feed>/<pkgname>/compile V=s
+   ```
+
+2. Locate the resulting `.ipk` under `bin/`:
+
+   ```
+   find bin -type f -name 'kmod-*.ipk'
+   ```
+
+3. Copy the `.ipk` to the board:
+
+   ```
+   # if connected to bridged lan port 1-4. Default IP address 192.168.2.1
+   scp bin/.../kmod-foo_*.ipk root@192.168.2.1:/tmp/
+   ```
+
+4. Install it on the board:
+
+   ```
+   opkg install /tmp/kmod-foo_*.ipk
+   ```
+
+5. Load the module and verify:
+
+   ```
+   modprobe foo
+   lsmod | grep foo
+   dmesg | tail -n 50
+   ```
 
 ## Release flow
 

@@ -4,7 +4,8 @@ RAMFS_COPY_BIN='blkid jffs2reset'
 
 enable_image_metadata_check() {
 	case "$(board_name)" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	botblox,ruggedsom)
 		REQUIRE_IMAGE_METADATA=1
 		;;
 	esac
@@ -15,7 +16,8 @@ platform_check_image() {
 	local board=$(board_name)
 
 	case "$board" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	botblox,ruggedsom)
 		return 0
 		;;
 	esac
@@ -31,6 +33,9 @@ platform_do_upgrade() {
 	technexion,imx7d-pico-pi)
 		imx_sdcard_do_upgrade "$1"
 		;;
+	botblox,ruggedsom)
+		botblox_imx_emmc_do_upgrade "$1"
+		;;
 	esac
 }
 
@@ -40,6 +45,9 @@ platform_copy_config() {
 	case "$board" in
 	technexion,imx7d-pico-pi)
 		imx_sdcard_copy_config
+		;;
+	botblox,ruggedsom)
+		botblox_imx_emmc_copy_config
 		;;
 	esac
 }

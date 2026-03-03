@@ -1,0 +1,433 @@
+From 4a9815384cc0a827bc80dfd4c524281fa53d8448 Mon Sep 17 00:00:00 2001
+From: AaronElijah <aaronzakelijah@googlemail.com>
+Date: Sat, 21 Feb 2026 12:41:12 +0000
+Subject: [PATCH 2/2] feat: net: dsa: microchip: KSZ8567 support
+
+---
+ drivers/net/dsa/microchip/ksz8795_reg.h |  1 +
+ drivers/net/dsa/microchip/ksz9477.c     | 54 +++++++++++++++
+ drivers/net/dsa/microchip/ksz9477.h     |  1 +
+ drivers/net/dsa/microchip/ksz9477_i2c.c |  6 +-
+ drivers/net/dsa/microchip/ksz9477_reg.h |  9 ++-
+ drivers/net/dsa/microchip/ksz_common.c  | 87 ++++++++++++++++++++++---
+ drivers/net/dsa/microchip/ksz_common.h  |  3 +
+ drivers/net/dsa/microchip/ksz_spi.c     |  4 ++
+ net/dsa/port.c                          |  1 +
+ 9 files changed, 153 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz8795_reg.h b/drivers/net/dsa/microchip/ksz8795_reg.h
+index 7a57c6088f80..e11963223045 100644
+--- a/drivers/net/dsa/microchip/ksz8795_reg.h
++++ b/drivers/net/dsa/microchip/ksz8795_reg.h
+@@ -44,6 +44,7 @@
+ 
+ #define UNICAST_VLAN_BOUNDARY		BIT(7)
+ #define SW_BACK_PRESSURE		BIT(5)
++#define SW_BACK_PRESSURE_COLLISION	0
+ #define FAIR_FLOW_CTRL			BIT(4)
+ #define NO_EXC_COLLISION_DROP		BIT(3)
+ #define SW_LEGAL_PACKET_DISABLE		BIT(1)
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index a11f2c1aabac..30a0ecb78fe6 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -246,6 +246,56 @@ void ksz9477_freeze_mib(struct ksz_device *dev, int port, bool freeze)
+ 	mutex_unlock(&p->mib.cnt_mutex);
+ }
+ 
++int ksz9477_errata_monitor(struct ksz_device *dev, int port,
++			   u64 tx_late_col)
++{
++	u32 pmavbc;
++	u8 status;
++	u16 pqm;
++	int ret;
++	ret = ksz_pread8(dev, port, REG_PORT_STATUS_0, &status);
++	if (ret)
++		return ret;
++	if (!(FIELD_GET(PORT_INTF_SPEED_MASK, status) == PORT_INTF_SPEED_NONE) &&
++	    !(status & PORT_INTF_FULL_DUPLEX)) {
++		/* Errata DS80000754 recommends monitoring potential faults in
++		 * half-duplex mode. The switch might not be able to communicate anymore
++		 * in these states.
++		 * If you see this message, please read the errata-sheet for more information:
++		 * https://ww1.microchip.com/downloads/aemDocuments/documents/UNG/ProductDocuments/Errata/KSZ9477S-Errata-DS80000754.pdf
++		 * To workaround this issue, half-duplex mode should be avoided.
++		 * A software reset could be implemented to recover from this state.
++		 */
++		dev_warn_once(dev->dev,
++			      "Half-duplex detected on port %d, transmission halt may occur\n",
++			      port);
++		if (tx_late_col != 0) {
++			/* Transmission halt with late collisions */
++			dev_crit_once(dev->dev,
++				      "TX late collisions detected, transmission may be halted on port %d\n",
++				      port);
++		}
++		ret = ksz_read8(dev, REG_SW_LUE_CTRL_0, &status);
++		if (ret)
++			return ret;
++		if (status & SW_VLAN_ENABLE) {
++			ret = ksz_pread16(dev, port, REG_PORT_QM_TX_CNT_0__4, &pqm);
++			if (ret)
++				return ret;
++			ret = ksz_read32(dev, REG_PMAVBC, &pmavbc);
++			if (ret)
++				return ret;
++			if ((FIELD_GET(PMAVBC_MASK, pmavbc) <= PMAVBC_MIN) ||
++			    (FIELD_GET(PORT_QM_TX_CNT_M, pqm) >= PORT_QM_TX_CNT_MAX)) {
++				/* Transmission halt with Half-Duplex and VLAN */
++				dev_crit_once(dev->dev,
++					      "resources out of limits, transmission may be halted\n");
++			}
++		}
++	}
++	return ret;
++}
++
+ void ksz9477_port_init_cnt(struct ksz_device *dev, int port)
+ {
+ 	struct ksz_port_mib *mib = &dev->ports[port].mib;
+@@ -1223,6 +1273,10 @@ int ksz9477_setup(struct dsa_switch *ds)
+ 	/* enable global MIB counter freeze function */
+ 	ksz_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
+ 
++	/* enable IGMP and MLD snooping */
++	ksz_cfg(dev, S_MIRROR_CTRL, SW_IGMP_SNOOP, true);
++	ksz_cfg(dev, S_MIRROR_CTRL, SW_IPV6_MLD_SNOOP, true);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/net/dsa/microchip/ksz9477.h b/drivers/net/dsa/microchip/ksz9477.h
+index a6f425866a29..ac2681dd5d94 100644
+--- a/drivers/net/dsa/microchip/ksz9477.h
++++ b/drivers/net/dsa/microchip/ksz9477.h
+@@ -23,6 +23,7 @@ void ksz9477_r_mib_cnt(struct ksz_device *dev, int port, u16 addr, u64 *cnt);
+ void ksz9477_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
+ 		       u64 *dropped, u64 *cnt);
+ void ksz9477_freeze_mib(struct ksz_device *dev, int port, bool freeze);
++int ksz9477_errata_monitor(struct ksz_device *dev, int port, u64 tx_late_col);
+ void ksz9477_port_init_cnt(struct ksz_device *dev, int port);
+ int ksz9477_port_vlan_filtering(struct ksz_device *dev, int port,
+ 				bool flag, struct netlink_ext_ack *extack);
+diff --git a/drivers/net/dsa/microchip/ksz9477_i2c.c b/drivers/net/dsa/microchip/ksz9477_i2c.c
+index 2710afad4f3a..bedbbf7258a8 100644
+--- a/drivers/net/dsa/microchip/ksz9477_i2c.c
++++ b/drivers/net/dsa/microchip/ksz9477_i2c.c
+@@ -75,7 +75,7 @@ static void ksz9477_i2c_shutdown(struct i2c_client *i2c)
+ }
+ 
+ static const struct i2c_device_id ksz9477_i2c_id[] = {
+-	{ "ksz9477-switch", 0 },
++	{ "ksz9477-switch" },
+ 	{},
+ };
+ 
+@@ -106,6 +106,10 @@ static const struct of_device_id ksz9477_dt_ids[] = {
+ 		.compatible = "microchip,ksz8563",
+ 		.data = &ksz_switch_chips[KSZ8563]
+ 	},
++	{
++		.compatible = "microchip,ksz8567",
++		.data = &ksz_switch_chips[KSZ8567]
++ 	},
+ 	{
+ 		.compatible = "microchip,ksz9567",
+ 		.data = &ksz_switch_chips[KSZ9567]
+diff --git a/drivers/net/dsa/microchip/ksz9477_reg.h b/drivers/net/dsa/microchip/ksz9477_reg.h
+index c3ad8ce707f8..a265298407b6 100644
+--- a/drivers/net/dsa/microchip/ksz9477_reg.h
++++ b/drivers/net/dsa/microchip/ksz9477_reg.h
+@@ -860,8 +860,8 @@
+ 
+ #define REG_PORT_STATUS_0		0x0030
+ 
+-#define PORT_INTF_SPEED_M		0x3
+-#define PORT_INTF_SPEED_S		3
++#define PORT_INTF_SPEED_MASK		GENMASK(4, 3)
++#define PORT_INTF_SPEED_NONE		GENMASK(1, 0)
+ #define PORT_INTF_FULL_DUPLEX		BIT(2)
+ #define PORT_TX_FLOW_CTRL		BIT(1)
+ #define PORT_RX_FLOW_CTRL		BIT(0)
+@@ -1185,6 +1185,10 @@
+ #define PORT_RMII_CLK_SEL		BIT(7)
+ #define PORT_MII_SEL_EDGE		BIT(5)
+ 
++#define REG_PMAVBC			0x03AC
++#define PMAVBC_MASK			GENMASK(26, 16)
++#define PMAVBC_MIN			0x580
++
+ /* 4 - MAC */
+ #define REG_PORT_MAC_CTRL_0		0x0400
+ 
+@@ -1512,6 +1516,7 @@
+ 
+ #define PORT_QM_TX_CNT_USED_S		0
+ #define PORT_QM_TX_CNT_M		(BIT(11) - 1)
++#define PORT_QM_TX_CNT_MAX		0x200
+ 
+ #define REG_PORT_QM_TX_CNT_1__4		0x0A14
+ 
+diff --git a/drivers/net/dsa/microchip/ksz_common.c b/drivers/net/dsa/microchip/ksz_common.c
+index 651b81b278b2..0ec770403f8b 100644
+--- a/drivers/net/dsa/microchip/ksz_common.c
++++ b/drivers/net/dsa/microchip/ksz_common.c
+@@ -1121,6 +1121,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.tc_cbs_supported = true,
+ 		.tc_ets_supported = true,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1263,6 +1264,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.tc_cbs_supported = true,
+ 		.tc_ets_supported = true,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1295,6 +1297,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_nirqs = 2,
+ 		.num_tx_queues = 4,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1327,6 +1330,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_nirqs = 2,
+ 		.num_tx_queues = 4,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1357,6 +1361,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_nirqs = 2,
+ 		.num_tx_queues = 4,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1385,6 +1390,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.tc_cbs_supported = true,
+ 		.tc_ets_supported = true,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1400,6 +1406,39 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.gbit_capable = {true, true, true},
+ 	},
+ 
++	[KSZ8567] = {
++		.chip_id = KSZ8567_CHIP_ID,
++		.dev_name = "KSZ8567",
++		.num_vlans = 4096,
++		.num_alus = 4096,
++		.num_statics = 16,
++		.cpu_ports = 0x7F,	/* can be configured as cpu port */
++		.port_cnt = 7,		/* total physical port count */
++		.port_nirqs = 3,
++		.num_tx_queues = 4,
++		.tc_cbs_supported = true,
++		.tc_ets_supported = true,
++		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.regs = ksz9477_regs,
++		.masks = ksz9477_masks,
++		.shifts = ksz9477_shifts,
++		.xmii_ctrl0 = ksz9477_xmii_ctrl0,
++		.xmii_ctrl1 = ksz9477_xmii_ctrl1,
++		.supports_mii	= {false, false, false, false,
++				   false, true, true},
++		.supports_rmii	= {false, false, false, false,
++				   false, true, true},
++		.supports_rgmii = {false, false, false, false,
++				   false, true, true},
++		.internal_phy	= {true, true, true, true,
++				   true, false, false},
++		.gbit_capable	= {false, false, false, false, false, true, true},
++	},
++
+ 	[KSZ9567] = {
+ 		.chip_id = KSZ9567_CHIP_ID,
+ 		.dev_name = "KSZ9567",
+@@ -1413,6 +1452,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.tc_cbs_supported = true,
+ 		.tc_ets_supported = true,
+ 		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+@@ -1643,6 +1683,7 @@ static void ksz_phylink_get_caps(struct dsa_switch *ds, int port,
+ 
+ void ksz_r_mib_stats64(struct ksz_device *dev, int port)
+ {
++	int ret;
+ 	struct ethtool_pause_stats *pstats;
+ 	struct rtnl_link_stats64 *stats;
+ 	struct ksz_stats_raw *raw;
+@@ -1688,6 +1729,13 @@ void ksz_r_mib_stats64(struct ksz_device *dev, int port)
+ 	pstats->rx_pause_frames = raw->rx_pause;
+ 
+ 	spin_unlock(&mib->stats64_lock);
++
++	if (dev->info->phy_errata_9477) {
++		ret = ksz9477_errata_monitor(dev, port, raw->tx_late_col);
++		if (ret)
++			dev_err(dev->dev,
++				"Failed to monitor transmission halt\n");
++	}
+ }
+ 
+ void ksz88xx_r_mib_stats64(struct ksz_device *dev, int port)
+@@ -2342,17 +2390,28 @@ static u32 ksz_get_phy_flags(struct dsa_switch *ds, int port)
+ 		if (!port)
+ 			return MICREL_KSZ8_P1_ERRATA;
+ 		break;
+-	case KSZ9477_CHIP_ID:
+-		/* KSZ9477 Errata DS80000754C
++	case KSZ8567_CHIP_ID:
++		/* KSZ8567R Errata DS80000752C Module 4 */
++	case KSZ8765_CHIP_ID:
++	case KSZ8794_CHIP_ID:
++	case KSZ8795_CHIP_ID:
++ 	case KSZ9477_CHIP_ID:
++		/* KSZ9477S Errata DS80000754A Module 4 */
++	case KSZ9567_CHIP_ID:
++		/* KSZ9567S Errata DS80000756A Module 4 */
++	case KSZ9896_CHIP_ID:
++		/* KSZ9896C Errata DS80000757A Module 3 */
++	case KSZ9897_CHIP_ID:
++		/* KSZ9897R Errata DS80000758C Module 4 */
++		/* Energy Efficient Ethernet (EEE) feature select must be manually disabled
++ 		 *   The EEE feature is enabled by default, but it is not fully
++ 		 *   operational. It must be manually disabled through register
++ 		 *   controls. If not disabled, the PHY ports can auto-negotiate
++ 		 *   to enable EEE, and this feature can cause link drops when
++ 		 *   linked to another device supporting EEE.
+ 		 *
+-		 * Module 4: Energy Efficient Ethernet (EEE) feature select must
+-		 * be manually disabled
+-		 *   The EEE feature is enabled by default, but it is not fully
+-		 *   operational. It must be manually disabled through register
+-		 *   controls. If not disabled, the PHY ports can auto-negotiate
+-		 *   to enable EEE, and this feature can cause link drops when
+-		 *   linked to another device supporting EEE.
+-		 */
++		 * The same item appears in the errata for all switches above.
++ 		 */
+ 		return MICREL_NO_EEE;
+ 	}
+ 
+@@ -2608,6 +2667,7 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
+ 	if (dev->chip_id == KSZ9477_CHIP_ID ||
+ 	    dev->chip_id == KSZ9896_CHIP_ID ||
+ 	    dev->chip_id == KSZ9897_CHIP_ID ||
++		dev->chip_id == KSZ8567_CHIP_ID ||
+ 	    dev->chip_id == KSZ9567_CHIP_ID)
+ 		proto = DSA_TAG_PROTO_KSZ9477;
+ 
+@@ -2715,6 +2775,7 @@ static int ksz_max_mtu(struct dsa_switch *ds, int port)
+ 	case KSZ8563_CHIP_ID:
+ 	case KSZ9477_CHIP_ID:
+ 	case KSZ9563_CHIP_ID:
++	case KSZ8567_CHIP_ID:
+ 	case KSZ9567_CHIP_ID:
+ 	case KSZ9893_CHIP_ID:
+ 	case KSZ9896_CHIP_ID:
+@@ -2741,6 +2802,7 @@ static int ksz_validate_eee(struct dsa_switch *ds, int port)
+ 	case KSZ8563_CHIP_ID:
+ 	case KSZ9477_CHIP_ID:
+ 	case KSZ9563_CHIP_ID:
++	case KSZ8567_CHIP_ID:
+ 	case KSZ9567_CHIP_ID:
+ 	case KSZ9893_CHIP_ID:
+ 	case KSZ9896_CHIP_ID:
+@@ -2813,6 +2875,10 @@ static void ksz_set_xmii(struct ksz_device *dev, int port,
+ 		break;
+ 	case PHY_INTERFACE_MODE_RMII:
+ 		data8 |= bitval[P_RMII_SEL];
++		/* For RMII interface, set RMII Normal Mode */
++		/* KSZ switches that expect RMII clock input should uncomment this line */
++		/* A better way to enable this is to add a rmii_normal_mode flag to struct ksz_port*/
++		data8 |= 0x04;
+ 		break;
+ 	case PHY_INTERFACE_MODE_GMII:
+ 		data8 |= bitval[P_GMII_SEL];
+@@ -3082,6 +3148,7 @@ static int ksz_switch_detect(struct ksz_device *dev)
+ 		case KSZ9477_CHIP_ID:
+ 		case KSZ9896_CHIP_ID:
+ 		case KSZ9897_CHIP_ID:
++		case KSZ8567_CHIP_ID:
+ 		case KSZ9567_CHIP_ID:
+ 		case LAN9370_CHIP_ID:
+ 		case LAN9371_CHIP_ID:
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index 0e51f2277381..7ad6b213ed2f 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -60,6 +60,7 @@ struct ksz_chip_data {
+ 	bool tc_cbs_supported;
+ 	bool tc_ets_supported;
+ 	const struct ksz_dev_ops *ops;
++	bool phy_errata_9477;
+ 	bool ksz87xx_eee_link_erratum;
+ 	const struct ksz_mib_names *mib_names;
+ 	int mib_cnt;
+@@ -183,6 +184,7 @@ enum ksz_model {
+ 	KSZ9897,
+ 	KSZ9893,
+ 	KSZ9563,
++	KSZ8567,
+ 	KSZ9567,
+ 	LAN9370,
+ 	LAN9371,
+@@ -202,6 +204,7 @@ enum ksz_chip_id {
+ 	KSZ9897_CHIP_ID = 0x00989700,
+ 	KSZ9893_CHIP_ID = 0x00989300,
+ 	KSZ9563_CHIP_ID = 0x00956300,
++	KSZ8567_CHIP_ID = 0x00856700,
+ 	KSZ9567_CHIP_ID = 0x00956700,
+ 	LAN9370_CHIP_ID = 0x00937000,
+ 	LAN9371_CHIP_ID = 0x00937100,
+diff --git a/drivers/net/dsa/microchip/ksz_spi.c b/drivers/net/dsa/microchip/ksz_spi.c
+index 279338451621..a3ec47f4ac92 100644
+--- a/drivers/net/dsa/microchip/ksz_spi.c
++++ b/drivers/net/dsa/microchip/ksz_spi.c
+@@ -167,6 +167,10 @@ static const struct of_device_id ksz_dt_ids[] = {
+ 		.compatible = "microchip,ksz8563",
+ 		.data = &ksz_switch_chips[KSZ8563]
+ 	},
++	{
++		.compatible = "microchip,ksz8567",
++		.data = &ksz_switch_chips[KSZ8567]
++ 	},
+ 	{
+ 		.compatible = "microchip,ksz9567",
+ 		.data = &ksz_switch_chips[KSZ9567]
+diff --git a/net/dsa/port.c b/net/dsa/port.c
+index 37ab238e8304..2965a6d328ba 100644
+--- a/net/dsa/port.c
++++ b/net/dsa/port.c
+@@ -1919,6 +1919,7 @@ static const char * const dsa_switches_apply_workarounds[] = {
+ 	"microchip,ksz9893",
+ 	"microchip,ksz9563",
+ 	"microchip,ksz8563",
++	"microchip,ksz8567",
+ 	"microchip,ksz9567",
+ #endif
+ #if IS_ENABLED(CONFIG_NET_DSA_SMSC_LAN9303_MDIO)
+-- 
+2.52.0
+
