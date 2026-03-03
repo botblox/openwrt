@@ -59,8 +59,8 @@ endef
 
 define U-Boot/ruggedsom
   NAME:=BotBlox Rugged SOM eMMC
-  BUILD_SUBTARGET:=imx6ull
-  BUILD_DEVICES:=ruggedsom
+  BUILD_SUBTARGET:=cortexa7
+  BUILD_DEVICES:=botblox_ruggedsom
   UBOOT_CONFIG:=botblox_swr_som_emmc
   DTB_NAME:=imx6ull-botblox-swr-som-emmc
 endef

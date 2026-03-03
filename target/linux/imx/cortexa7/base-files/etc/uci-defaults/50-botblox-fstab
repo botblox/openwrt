@@ -1,0 +1,33 @@
+#!/bin/sh
+
+. /lib/functions/uci-defaults.sh
+. /lib/imx.sh
+
+[ "$(board_name)" = "botblox,ruggedsom" ] || exit 0
+
+mkdir -p /boot
+
+# Do not overwrite if the user or another script already defined /boot
+if [ -f /etc/fstab ] && grep -qs '[[:space:]]/boot[[:space:]]' /etc/fstab; then
+	exit 0
+fi
+
+bootdev="/dev/mmcblk1p1"
+
+rootuuid="$(rootpartuuid 2>/dev/null)"
+if [ -n "$rootuuid" ] && [ -e "/dev/disk/by-partuuid/${rootuuid}-01" ]; then
+	bootdev="/dev/disk/by-partuuid/${rootuuid}-01"
+else
+	uuid_bootpart="$(bootpart_from_uuid 2>/dev/null)"
+	if [ -n "$uuid_bootpart" ]; then
+		bootdev="$uuid_bootpart"
+	fi
+fi
+
+cat > /etc/fstab <<-EOF
+	# <file system> <mount point> <type> <options> <dump> <pass>
+	${bootdev} /boot ext4 rw,noatime 0 2
+EOF
+
+exit 0
+

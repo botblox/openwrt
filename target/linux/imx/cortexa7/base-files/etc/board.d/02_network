@@ -8,8 +8,12 @@ case "$board" in
 technexion,imx7d-pico-pi)
 	ucidef_set_interface_lan "eth0"
 	;;
+botblox,ruggedsom)
+	ucidef_set_interface "lan" device "lan1 lan2 lan3 lan4" protocol "static" ipaddr "192.168.2.1" netmask "255.255.255.0"
+	ucidef_set_interface "wan" device "lan5" protocol "dhcp"
+	;;
 *)
-	ucidef_set_interfaces_lan_wan "eth0" "eth1"
+	ucidef_set_interface_lan "eth0"
 	;;
 esac
 

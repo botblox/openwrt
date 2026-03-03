@@ -1,0 +1,502 @@
+From e16a44c0612e4a325005bdf6a3ef5ca4639cb81b Mon Sep 17 00:00:00 2001
+From: AaronElijah <aaronzakelijah@googlemail.com>
+Date: Fri, 20 Feb 2026 18:27:06 +0000
+Subject: [PATCH 1/2] feat: arm: dts: add imx6ull BotBlox Rugged SOM boards
+
+---
+ arch/arm/boot/dts/nxp/imx/Makefile            |   4 +
+ ...imx6ull-botblox-swr-som-emmc-no-switch.dts |  10 +
+ .../nxp/imx/imx6ull-botblox-swr-som-emmc.dts  |  15 +
+ .../imx/imx6ull-botblox-swr-som-no-switch.dts |  10 +
+ .../dts/nxp/imx/imx6ull-botblox-swr-som.dts   | 405 ++++++++++++++++++
+ 5 files changed, 444 insertions(+)
+ create mode 100644 arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc-no-switch.dts
+ create mode 100755 arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc.dts
+ create mode 100644 arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-no-switch.dts
+ create mode 100755 arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som.dts
+
+diff --git a/arch/arm/boot/dts/nxp/imx/Makefile b/arch/arm/boot/dts/nxp/imx/Makefile
+index 3629e343d322..bc82f71265fc 100644
+--- a/arch/arm/boot/dts/nxp/imx/Makefile
++++ b/arch/arm/boot/dts/nxp/imx/Makefile
+@@ -315,6 +315,10 @@ dtb-$(CONFIG_SOC_IMX6UL) += \
+ 	imx6ul-tx6ul-0011.dtb \
+ 	imx6ul-tx6ul-mainboard.dtb \
+ 	imx6ull-14x14-evk.dtb \
++	imx6ull-botblox-swr-som.dtb \
++	imx6ull-botblox-swr-som-emmc.dtb \
++	imx6ull-botblox-swr-som-emmc-no-switch.dtb \
++	imx6ull-botblox-swr-som-no-switch.dtb \
+ 	imx6ull-colibri-aster.dtb \
+ 	imx6ull-colibri-emmc-aster.dtb \
+ 	imx6ull-colibri-emmc-eval-v3.dtb \
+diff --git a/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc-no-switch.dts b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc-no-switch.dts
+new file mode 100644
+index 000000000000..9f0925fe6949
+--- /dev/null
++++ b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc-no-switch.dts
+@@ -0,0 +1,10 @@
++// Copyright (C) 2024 Kapek Ltd.
++
++/dts-v1/;
++
++#include "imx6ull-botblox-swr-som-emmc.dts"
++
++
++&i2c1 {
++    /delete-node/ switch@5f;
++};
+\ No newline at end of file
+diff --git a/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc.dts b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc.dts
+new file mode 100755
+index 000000000000..685a5370fa39
+--- /dev/null
++++ b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-emmc.dts
+@@ -0,0 +1,15 @@
++// Copyright (C) 2023 Kapek Ltd.
++
++/dts-v1/;
++
++#include "imx6ull-botblox-swr-som.dts"
++
++&usdhc2 {
++	pinctrl-names = "default", "state_100mhz", "state_200mhz";
++	pinctrl-0 = <&pinctrl_usdhc2_8bit>;
++	pinctrl-1 = <&pinctrl_usdhc2_8bit_100mhz>;
++	pinctrl-2 = <&pinctrl_usdhc2_8bit_200mhz>;
++	bus-width = <8>;
++	non-removable;
++	status = "okay";
++};
+\ No newline at end of file
+diff --git a/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-no-switch.dts b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-no-switch.dts
+new file mode 100644
+index 000000000000..3441086a66fb
+--- /dev/null
++++ b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som-no-switch.dts
+@@ -0,0 +1,10 @@
++// Copyright (C) 2024 Kapek Ltd.
++
++/dts-v1/;
++
++#include "imx6ull-botblox-swr-som.dts"
++
++
++&i2c1 {
++    /delete-node/ switch@5f;
++};
+\ No newline at end of file
+diff --git a/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som.dts b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som.dts
+new file mode 100755
+index 000000000000..c1ab01051265
+--- /dev/null
++++ b/arch/arm/boot/dts/nxp/imx/imx6ull-botblox-swr-som.dts
+@@ -0,0 +1,405 @@
++// Copyright (C) 2023 Kapek Ltd.
++
++/dts-v1/;
++
++#include "imx6ull.dtsi"
++
++/ {
++    model = "Freescale i.MX6 ULL BotBlox SwitchBlox Rugged Board";
++    compatible = "botblox,ruggedsom", "fsl,imx6ull";
++
++    chosen {
++		stdout-path = &uart1;
++	};
++
++    memory@80000000 {
++		device_type = "memory";
++		reg = <0x80000000 0x20000000>;
++	};
++
++    reserved-memory {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges;
++
++		linux,cma {
++			compatible = "shared-dma-pool";
++			reusable;
++			size = <0xa000000>;
++			linux,cma-default;
++		};
++	};
++
++    pxp_v4l2 {
++		compatible = "fsl,imx6ul-pxp-v4l2", "fsl,imx6sx-pxp-v4l2", "fsl,imx6sl-pxp-v4l2";
++		status = "okay";
++	};
++};
++
++&clks {
++	assigned-clocks = <&clks IMX6UL_CLK_PLL3_PFD2>,
++			  <&clks IMX6UL_CLK_PLL4_AUDIO_DIV>;
++	assigned-clock-rates = <320000000>, <786432000>;
++};
++
++&fec1 {
++    pinctrl-names = "default";
++    pinctrl-0 = <&pinctrl_enet1>;
++    phy-mode = "rmii";
++    status = "okay";
++
++    fixed-link {
++        speed = <100>;
++        full-duplex;
++    };
++};
++
++&i2c1 {
++    clock-frequency = <100000>;
++    pinctrl-names = "default";
++    pinctrl-0 = <&pinctrl_i2c1>;
++    status = "okay";
++
++    switch: switch@5f {
++        compatible = "microchip,ksz8567";
++        reg = <0x5f>;
++		status = "okay";
++
++        ports {
++            #addess-cells = <1>;
++            #size-cells = <0>;
++
++			port@0 {
++				reg = <0x00>;
++				label = "lan1";
++				phy-handle = <&phy_port1>;
++			};
++
++			port@1 {
++				reg = <0x01>;
++				label = "lan2";
++				phy-handle = <&phy_port2>;
++			};
++
++			port@2 {
++				reg = <0x02>;
++				label = "lan3";
++				phy-handle = <&phy_port3>;
++			};
++
++			port@3 {
++				reg = <0x03>;
++				label = "lan4";
++				phy-handle = <&phy_port4>;
++			};
++
++			port@4 {
++				reg = <0x04>;
++				label = "lan5";
++				phy-handle = <&phy_port5>;
++			};
++
++			port@5 {
++				reg = <0x05>;
++				label = "cpu";
++				ethernet = <&fec1>;
++				phy-mode = "rmii";
++
++				fixed-link {
++					speed = <100>;
++					full-duplex;
++				};
++			};
++        };
++
++		mdio {
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			phy_port1: switchphy@0 {
++				reg = <0x00>;
++			};
++
++			phy_port2: switchphy@1 {
++				reg = <0x01>;
++			};
++
++			phy_port3: switchphy@2 {
++				reg = <0x02>;
++			};
++
++			phy_port4: switchphy@3 {
++				reg = <0x03>;
++			};
++
++			phy_port5: switchphy@4 {
++				reg = <0x04>;
++			};
++		};
++    };
++};
++
++&qspi {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_qspi>;
++	status = "okay";
++
++	flash0: flash@0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "micron,mt25ql256a", "jedec,spi-nor";
++		spi-max-frequency = <29000000>;
++		spi-rx-bus-width = <4>;
++		spi-tx-bus-width = <1>;
++		reg = <0>;
++	};
++};
++
++&snvs_poweroff {
++	status = "okay";
++};
++
++&snvs_pwrkey {
++	status = "okay";
++};
++
++&uart1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_uart1>;
++	status = "okay";
++};
++
++&uart2 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_uart2>;
++	rts-gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
++	linux,rs485-enabled-at-boot-time;
++	rs485-rts-active-high;
++	/* rs485-rts-delay = <1 1>; */
++	/delete-property/ uart-has-rtscts;
++
++	/* uart-has-rtscts; */
++	/* for DTE mode, add below change */
++	/* fsl,dte-mode; */
++	/* pinctrl-0 = <&pinctrl_uart2dte>; */
++	status = "okay";
++};
++
++&usbotg1 {
++	dr_mode = "otg";
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_usb_otg1>;
++	status = "okay";
++};
++
++&usbphy1 {
++	fsl,tx-d-cal = <106>;
++};
++
++&usdhc1 {
++	pinctrl-names = "default", "state_100mhz", "state_200mhz";
++	pinctrl-0 = <&pinctrl_usdhc1>;
++	pinctrl-1 = <&pinctrl_usdhc1_100mhz>;
++	pinctrl-2 = <&pinctrl_usdhc1_200mhz>;
++	cd-gpios = <&gpio1 19 GPIO_ACTIVE_LOW>;
++	keep-power-in-suspend;
++	wakeup-source;
++	status = "okay";
++};
++
++&usdhc2 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_usdhc2>;
++	no-1-8-v;
++	broken-cd;
++	keep-power-in-suspend;
++	wakeup-source;
++	status = "okay";
++};
++
++&wdog1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_wdog>;
++	fsl,ext-reset-output;
++};
++
++
++&iomuxc {
++	pinctrl-names = "default";
++
++	pinctrl_enet1: enet1grp {
++		fsl,pins = <
++			MX6UL_PAD_ENET1_RX_EN__ENET1_RX_EN	0x130b0
++			MX6UL_PAD_ENET1_RX_ER__ENET1_RX_ER	0x130b0
++			MX6UL_PAD_ENET1_RX_DATA0__ENET1_RDATA00	0x130b0
++			MX6UL_PAD_ENET1_RX_DATA1__ENET1_RDATA01	0x130b0
++			MX6UL_PAD_ENET1_TX_EN__ENET1_TX_EN	0x1b0b8
++			MX6UL_PAD_ENET1_TX_DATA0__ENET1_TDATA00	0x1b0b8
++			MX6UL_PAD_ENET1_TX_DATA1__ENET1_TDATA01	0x1b0b8
++			MX6UL_PAD_ENET1_TX_CLK__ENET1_REF_CLK1	0x4001b039
++		>;
++	};
++
++	pinctrl_i2c1: i2c1grp {
++		fsl,pins = <
++			MX6UL_PAD_GPIO1_IO02__I2C1_SCL		0x4001b8b0
++			MX6UL_PAD_GPIO1_IO03__I2C1_SDA		0x4001b8b0
++		>;
++	};
++
++	pinctrl_qspi: qspigrp {
++		fsl,pins = <
++			MX6UL_PAD_NAND_WP_B__QSPI_A_SCLK	0x70a1
++			MX6UL_PAD_NAND_READY_B__QSPI_A_DATA00	0x70a1
++			MX6UL_PAD_NAND_CE0_B__QSPI_A_DATA01	0x70a1
++			MX6UL_PAD_NAND_CE1_B__QSPI_A_DATA02	0x70a1
++			MX6UL_PAD_NAND_CLE__QSPI_A_DATA03	0x70a1
++			MX6UL_PAD_NAND_DQS__QSPI_A_SS0_B	0x70a1
++		>;
++	};
++
++	pinctrl_uart1: uart1grp {
++		fsl,pins = <
++			MX6UL_PAD_UART1_TX_DATA__UART1_DCE_TX 0x1b0b1
++			MX6UL_PAD_UART1_RX_DATA__UART1_DCE_RX 0x1b0b1
++		>;
++	};
++
++	pinctrl_uart2: uart2grp {
++		fsl,pins = <
++			MX6UL_PAD_UART2_TX_DATA__UART2_DCE_TX	0x1b0b1
++			MX6UL_PAD_UART2_RX_DATA__UART2_DCE_RX	0x1b0b1
++			MX6UL_PAD_GPIO1_IO06__GPIO1_IO06		0x1b0b1
++		>;
++	};
++
++	pinctrl_uart2_rts: uart2rtsgrp {
++		fsl,pins = <
++			/* MX6UL_PAD_GPIO1_IO06__GPIO1_IO06		0x1b0b1 */
++			MX6UL_PAD_GPIO1_IO06__GPIO1_IO06		0x1b0b1
++		>;
++	};
++
++	pinctrl_uart2dce: uart2dcegrp {
++		fsl,pins = <
++			MX6UL_PAD_UART2_TX_DATA__UART2_DCE_TX	0x1b0b1
++			MX6UL_PAD_UART2_RX_DATA__UART2_DCE_RX	0x1b0b1
++			MX6UL_PAD_UART3_RX_DATA__UART2_DCE_RTS	0x1b0b1
++			MX6UL_PAD_UART3_TX_DATA__UART2_DCE_CTS	0x1b0b1
++		>;
++	};
++
++	pinctrl_uart2dte: uart2dtegrp {
++		fsl,pins = <
++			MX6UL_PAD_UART2_TX_DATA__UART2_DTE_RX	0x1b0b1
++			MX6UL_PAD_UART2_RX_DATA__UART2_DTE_TX	0x1b0b1
++			MX6UL_PAD_UART3_RX_DATA__UART2_DTE_CTS	0x1b0b1
++			MX6UL_PAD_UART3_TX_DATA__UART2_DTE_RTS	0x1b0b1
++		>;
++	};
++
++	pinctrl_usb_otg1: usbotg1grp {
++		fsl,pins = <
++			MX6UL_PAD_GPIO1_IO00__ANATOP_OTG1_ID	0x17059
++		>;
++	};
++
++	pinctrl_usdhc1: usdhc1grp {
++		fsl,pins = <
++			MX6UL_PAD_SD1_CMD__USDHC1_CMD     	0x17059
++			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x10071
++			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0 	0x17059
++			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1 	0x17059
++			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2 	0x17059
++			MX6UL_PAD_SD1_DATA3__USDHC1_DATA3 	0x17059
++			MX6UL_PAD_UART1_RTS_B__GPIO1_IO19       0x17059 /* SD1 CD */
++			MX6UL_PAD_GPIO1_IO05__USDHC1_VSELECT    0x17059 /* SD1 VSELECT */
++			MX6UL_PAD_GPIO1_IO09__GPIO1_IO09        0x17059 /* SD1 RESET */
++		>;
++	};
++
++	pinctrl_usdhc1_100mhz: usdhc1grp100mhz {
++		fsl,pins = <
++			MX6UL_PAD_SD1_CMD__USDHC1_CMD     0x170b9
++			MX6UL_PAD_SD1_CLK__USDHC1_CLK     0x100b9
++			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0 0x170b9
++			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1 0x170b9
++			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2 0x170b9
++			MX6UL_PAD_SD1_DATA3__USDHC1_DATA3 0x170b9
++
++		>;
++	};
++
++	pinctrl_usdhc1_200mhz: usdhc1grp200mhz {
++		fsl,pins = <
++			MX6UL_PAD_SD1_CMD__USDHC1_CMD     0x170f9
++			MX6UL_PAD_SD1_CLK__USDHC1_CLK     0x100f9
++			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0 0x170f9
++			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1 0x170f9
++			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2 0x170f9
++			MX6UL_PAD_SD1_DATA3__USDHC1_DATA3 0x170f9
++		>;
++	};
++
++	pinctrl_usdhc2: usdhc2grp {
++		fsl,pins = <
++			MX6UL_PAD_NAND_RE_B__USDHC2_CLK     0x17059
++			MX6UL_PAD_NAND_WE_B__USDHC2_CMD     0x17059
++			MX6UL_PAD_NAND_DATA00__USDHC2_DATA0 0x17059
++			MX6UL_PAD_NAND_DATA01__USDHC2_DATA1 0x17059
++			MX6UL_PAD_NAND_DATA02__USDHC2_DATA2 0x17059
++			MX6UL_PAD_NAND_DATA03__USDHC2_DATA3 0x17059
++		>;
++	};
++
++	pinctrl_usdhc2_8bit: usdhc2grp_8bit {
++		fsl,pins = <
++			MX6UL_PAD_NAND_RE_B__USDHC2_CLK     0x17059
++			MX6UL_PAD_NAND_WE_B__USDHC2_CMD     0x17059
++			MX6UL_PAD_NAND_DATA00__USDHC2_DATA0 0x17059
++			MX6UL_PAD_NAND_DATA01__USDHC2_DATA1 0x17059
++			MX6UL_PAD_NAND_DATA02__USDHC2_DATA2 0x17059
++			MX6UL_PAD_NAND_DATA03__USDHC2_DATA3 0x17059
++			MX6UL_PAD_NAND_DATA04__USDHC2_DATA4 0x17059
++			MX6UL_PAD_NAND_DATA05__USDHC2_DATA5 0x17059
++			MX6UL_PAD_NAND_DATA06__USDHC2_DATA6 0x17059
++			MX6UL_PAD_NAND_DATA07__USDHC2_DATA7 0x17059
++		>;
++	};
++
++	pinctrl_usdhc2_8bit_100mhz: usdhc2grp_8bit_100mhz {
++		fsl,pins = <
++			MX6UL_PAD_NAND_RE_B__USDHC2_CLK     0x100b9
++			MX6UL_PAD_NAND_WE_B__USDHC2_CMD     0x170b9
++			MX6UL_PAD_NAND_DATA00__USDHC2_DATA0 0x170b9
++			MX6UL_PAD_NAND_DATA01__USDHC2_DATA1 0x170b9
++			MX6UL_PAD_NAND_DATA02__USDHC2_DATA2 0x170b9
++			MX6UL_PAD_NAND_DATA03__USDHC2_DATA3 0x170b9
++			MX6UL_PAD_NAND_DATA04__USDHC2_DATA4 0x170b9
++			MX6UL_PAD_NAND_DATA05__USDHC2_DATA5 0x170b9
++			MX6UL_PAD_NAND_DATA06__USDHC2_DATA6 0x170b9
++			MX6UL_PAD_NAND_DATA07__USDHC2_DATA7 0x170b9
++		>;
++	};
++
++	pinctrl_usdhc2_8bit_200mhz: usdhc2grp_8bit_200mhz {
++		fsl,pins = <
++			MX6UL_PAD_NAND_RE_B__USDHC2_CLK     0x100f9
++			MX6UL_PAD_NAND_WE_B__USDHC2_CMD     0x170f9
++			MX6UL_PAD_NAND_DATA00__USDHC2_DATA0 0x170f9
++			MX6UL_PAD_NAND_DATA01__USDHC2_DATA1 0x170f9
++			MX6UL_PAD_NAND_DATA02__USDHC2_DATA2 0x170f9
++			MX6UL_PAD_NAND_DATA03__USDHC2_DATA3 0x170f9
++			MX6UL_PAD_NAND_DATA04__USDHC2_DATA4 0x170f9
++			MX6UL_PAD_NAND_DATA05__USDHC2_DATA5 0x170f9
++			MX6UL_PAD_NAND_DATA06__USDHC2_DATA6 0x170f9
++			MX6UL_PAD_NAND_DATA07__USDHC2_DATA7 0x170f9
++		>;
++	};
++
++	pinctrl_wdog: wdoggrp {
++		fsl,pins = <
++			MX6UL_PAD_LCD_RESET__WDOG1_WDOG_ANY    0x30b0
++		>;
++	};
++};
+-- 
+2.52.0
+
