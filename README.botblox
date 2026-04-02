@@ -7,35 +7,41 @@
 2. Run `./scripts/feeds install -a` to install symlinks for all obtained
    packages into package/feeds/
 3. Follow instructions [here](https://github.com/botblox/luci-theme-botblox/blob/master/README.md) to make custom BotBlox Luci theme available
-4. Run `make menuconfig` to select your preferred configuration for the toolchain, target system & firmware packages.
-5. You must select the following target, subtarget and profile
+4. To reproduce the BotBlox build configuration, apply `bb-diffconfig`
+   file instead of selecting options manually in `make menuconfig` (unless you are targeting a specific build)
 
-```
-CONFIG_TARGET_imx=y
-CONFIG_TARGET_imx_cortexa7=y
-CONFIG_TARGET_imx_cortexa7_DEVICE_botblox_ruggedsom=y
-CONFIG_TARGET_BOARD="imx"
-CONFIG_TARGET_SUBTARGET="cortexa7"
-CONFIG_TARGET_PROFILE="DEVICE_botblox_ruggedsom"
-```
+   ```
+   cp bb-diffconfig .config
+   make defconfig
+   ```
+
+   `bb-diffconfig` is generated with `./scripts/diffconfig.sh` and captures the
+   BotBlox-specific OpenWrt configuration delta. `make defconfig` expands this into a full `.config` with the correct defaults for this tree.
+
+5. If you want to adjust after applying `bb-diffconfig`, run `make menuconfig`. If you make changes and want to preserve them for future reproducible builds, regenerate
+   diffconfig:
+
+   ```
+   ./scripts/diffconfig.sh > bb-diffconfig
+   ```
 
 6. Run `make` to build your firmware. This will download all sources, build the
-   cross-compile toolchain and then cross-compile the GNU/Linux kernel & all chosen
-   applications for your target system.
+   cross-compile toolchain, and then cross-compile the GNU/Linux kernel & chosen
+   applications.
 
 ## Manual upgrade (U-Boot + TFTP)
 
 This method flashes the full eMMC image and will erase existing settings on the board.
 We are working on a sysupgrade-based release later.
 
-1. Build an eMMC image and locate the `openwrt-{release}-{version_code}-imx-imx6ull-botblox_ruggedsom-ext4-emmc.img` artifact. If you are building from source, search `bin/targets/imx/cortexa7`.
+1. Build an eMMC image and locate the `openwrt-{release}-{version_code}-imx-cortexa7-botblox_ruggedsom-ext4-emmc.img` artifact. If you are building from source, search `bin/targets/imx/cortexa7`.
 2. Copy the image into your TFTP server root (often `/var/lib/tftpboot/` or `/srv/tftp/` on Linux) and ensure a TFTP server is running. Please see [this example](https://docs.fedoraproject.org/en-US/fedora/f36/install-guide/advanced/Network_based_Installations/#pxe-tftpd) on Fedora Linux
 3. Boot the board and interrupt autoboot to enter the U-Boot shell.
 4. Load the image into RAM:
 
    ```
    env set serverip ${host_machine_ip}
-   tftpboot ${loadaddr} openwrt-{release}-{version_code}-imx-imx6ull-botblox_ruggedsom-ext4-emmc.img
+   tftpboot ${loadaddr} openwrt-{release}-{version_code}-imx-cortexa7-botblox_ruggedsom-ext4-emmc.img
    ```
 
 5. Calculate the block count of 512-byte blocks:
