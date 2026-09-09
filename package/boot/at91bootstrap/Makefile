@@ -9,9 +9,9 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=at91bootstrap
-PKG_VERSION:=v4.0.10
-PKG_SOURCE_VERSION:=c123c68d1f5b13a55a8e164b03be866491ce3049
-PKG_MIRROR_HASH:=0c2d6a8a81a179c29227ad2f880b403f86095d3671f176ff1d2a21ba4e09c858
+PKG_VERSION:=v4.0.13
+PKG_SOURCE_VERSION:=c2e3f87bf694a4c27c60d24db512adcdd4d7b442
+PKG_MIRROR_HASH:=1edbdaa298ba95843dd9300ed798231122aeec27016ec3029b8f0112398f2398
 BINARIES_DIR:=build/binaries
 PKG_CPE_ID:=cpe:/a:linux4sam:at91bootstrap
 
@@ -19,7 +19,9 @@ AT91BOOTSTRAP_V4=y
 ifdef CONFIG_PACKAGE_at91bootstrap-sama5d4_xplaineddf_uboot_secure
   AT91BOOTSTRAP_V4=n
 else ifdef CONFIG_TARGET_at91_sam9x
-  ifndef CONFIG_TARGET_at91_sam9x_DEVICE_microchip_sam9x60ek
+  ifeq ($(strip $(CONFIG_TARGET_at91_sam9x_DEVICE_microchip_sam9x60ek) \
+               $(CONFIG_TARGET_at91_sam9x_DEVICE_botblox_routercore) \
+               $(CONFIG_PACKAGE_at91bootstrap-sam9x75_routercore_nf_uboot)),)
     AT91BOOTSTRAP_V4=n
   endif
 endif
@@ -69,6 +71,12 @@ define AT91Bootstrap/sam9x60eksd_uboot
   NAME:=AT91Bootstrap for SAM9X60-EK board (SDcard)
   BUILD_SUBTARGET:=sam9x
   BUILD_DEVICES:=microchip_sam9x60ek
+endef
+
+define AT91Bootstrap/sam9x75_routercore_nf_uboot
+  NAME:=AT91Bootstrap for SAM9X75 BotBlox RouterCore board (NandFlash)
+  BUILD_SUBTARGET:=sam9x
+  BUILD_DEVICES:=botblox_routercore
 endef
 
 define AT91Bootstrap/sama5d2_icpdf_qspi_uboot
@@ -178,6 +186,7 @@ AT91BOOTSTRAP_TARGETS := \
 	at91sam9x5eksd_uboot \
 	sam9x60eknf_uboot \
 	sam9x60eksd_uboot \
+	sam9x75_routercore_nf_uboot \
 	sama5d2_icpdf_qspi_uboot \
 	sama5d2_icpsd_uboot \
 	sama5d2_xplaineddf_uboot \
