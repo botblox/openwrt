@@ -1,0 +1,26 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+routercore_move_service_start() {
+	local enabled=0
+	local link
+	local service="$1"
+
+	for link in /etc/rc.d/S[0-9][0-9]"$service"; do
+		[ -L "$link" ] || continue
+		enabled=1
+		rm -f "$link"
+	done
+
+	[ "$enabled" = 1 ] && ln -s "../init.d/$service" "/etc/rc.d/S21$service"
+}
+
+reorder_routercore_services() {
+	[ "$(board_name)" = "botblox,sam9x75-routercore" ] || return 0
+
+	routercore_move_service_start dnsmasq
+	routercore_move_service_start dropbear
+}
+
+boot_hook_add preinit_main reorder_routercore_services

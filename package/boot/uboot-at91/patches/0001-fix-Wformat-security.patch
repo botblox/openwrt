@@ -1,7 +1,7 @@
-From 3b05406c02070df3e7f19399d81ebd35ed6deae5 Mon Sep 17 00:00:00 2001
+From d307c2258fa725180073c4c1925ae510ff5de225 Mon Sep 17 00:00:00 2001
 From: Claudiu Beznea <claudiu.beznea@microchip.com>
 Date: Tue, 12 Oct 2021 17:43:28 +0300
-Subject: [PATCH] fix -Wformat-security
+Subject: [PATCH 1/5] fix -Wformat-security
 
 Signed-off-by: Claudiu Beznea <claudiu.beznea@microchip.com>
 ---
@@ -10,9 +10,11 @@ Signed-off-by: Claudiu Beznea <claudiu.beznea@microchip.com>
  drivers/pinctrl/pinctrl-uclass.c | 2 +-
  3 files changed, 3 insertions(+), 3 deletions(-)
 
+diff --git a/cmd/panic.c b/cmd/panic.c
+index 7c0affa5eb5..dfc015ddce1 100644
 --- a/cmd/panic.c
 +++ b/cmd/panic.c
-@@ -11,7 +11,7 @@ static int do_panic(struct cmd_tbl *cmdt
+@@ -11,7 +11,7 @@ static int do_panic(struct cmd_tbl *cmdtp, int flag, int argc,
  {
  	char *text = (argc < 2) ? "" : argv[1];
  
@@ -21,9 +23,11 @@ Signed-off-by: Claudiu Beznea <claudiu.beznea@microchip.com>
  
  	return CMD_RET_SUCCESS;
  }
+diff --git a/cmd/version.c b/cmd/version.c
+index 62406608eb0..60290e56f9c 100644
 --- a/cmd/version.c
 +++ b/cmd/version.c
-@@ -24,7 +24,7 @@ static int do_version(struct cmd_tbl *cm
+@@ -18,7 +18,7 @@ static int do_version(struct cmd_tbl *cmdtp, int flag, int argc,
  {
  	char buf[DISPLAY_OPTIONS_BANNER_LENGTH];
  
@@ -32,9 +36,11 @@ Signed-off-by: Claudiu Beznea <claudiu.beznea@microchip.com>
  #ifdef CC_VERSION_STRING
  	puts(CC_VERSION_STRING "\n");
  #endif
+diff --git a/drivers/pinctrl/pinctrl-uclass.c b/drivers/pinctrl/pinctrl-uclass.c
+index d9c76898a96..1b871000dba 100644
 --- a/drivers/pinctrl/pinctrl-uclass.c
 +++ b/drivers/pinctrl/pinctrl-uclass.c
-@@ -375,7 +375,7 @@ int pinctrl_get_pin_name(struct udevice
+@@ -379,7 +379,7 @@ int pinctrl_get_pin_name(struct udevice *dev, int selector, char *buf,
  	if (!ops->get_pin_name)
  		return -ENOSYS;
  
@@ -43,3 +49,6 @@ Signed-off-by: Claudiu Beznea <claudiu.beznea@microchip.com>
  
  	return 0;
  }
+-- 
+2.52.0
+

@@ -1,0 +1,18 @@
+[ -e /etc/config/ubootenv ] && exit 0
+
+touch /etc/config/ubootenv
+
+. /lib/functions.sh
+. /lib/uboot-envtools.sh
+
+case "$(board_name)" in
+botblox,sam9x75-routercore)
+	ubootenv_add_mtd "env" "0x0" "0x20000" "0x40000"
+	ubootenv_add_mtd "env_redundant" "0x0" "0x20000" "0x40000"
+	;;
+esac
+
+config_load ubootenv
+config_foreach ubootenv_add_app_config ubootenv
+
+exit 0
