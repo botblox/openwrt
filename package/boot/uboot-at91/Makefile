@@ -7,13 +7,13 @@
 
 include $(TOPDIR)/rules.mk
 
-PKG_VERSION:=linux4sam-2022.04
+PKG_VERSION:=linux4microchip-2026.04
 PKG_RELEASE:=3
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/linux4sam/u-boot-at91.git
-PKG_MIRROR_HASH:=82229503800d9a624bb8de5f8d7a84cb35fd512a1550c6f1d46958cd47d4807b
-PKG_SOURCE_VERSION:=7b59654a486d39dc8e0343e2554699b8a79c7a54
+PKG_MIRROR_HASH:=7d0bab72afee7274c0f59d1206414ec7707d478b96dac1821bdd9a10b8b13291
+PKG_SOURCE_VERSION:=9fa52b889bd44a7d761b36be1a9c6b1db335022a
 
 include $(INCLUDE_DIR)/u-boot.mk
 include $(INCLUDE_DIR)/package.mk
@@ -57,6 +57,12 @@ define U-Boot/sam9x60ek_mmc
   NAME:=SAM9X60-EK board (SDcard)
   BUILD_SUBTARGET:=sam9x
   BUILD_DEVICES:=microchip_sam9x60ek
+endef
+
+define U-Boot/sam9x75_routercore_nandflash
+  NAME:=SAM9X75 BotBlox RouterCore board (NandFlash)
+  BUILD_SUBTARGET:=sam9x
+  BUILD_DEVICES:=botblox_routercore
 endef
 
 define U-Boot/sama5d3_xplained_nandflash
@@ -155,6 +161,7 @@ UBOOT_TARGETS := \
 	at91sam9x5ek_mmc \
 	sam9x60ek_nandflash \
 	sam9x60ek_mmc \
+	sam9x75_routercore_nandflash \
 	sama5d3_xplained_nandflash \
 	sama5d3_xplained_mmc \
 	sama5d2_icp_mmc \

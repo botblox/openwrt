@@ -121,6 +121,14 @@ define Device/microchip_sam9x60ek
 endef
 TARGET_DEVICES += microchip_sam9x60ek
 
+define Device/botblox_routercore
+  $(Device/evaluation-dtb)
+  DEVICE_VENDOR := BotBlox
+  DEVICE_MODEL := RouterCore
+  DEVICE_DTS := at91-sam9x75_routercore
+endef
+TARGET_DEVICES += botblox_routercore
+
 define Device/calamp_lmu5000
   $(Device/production)
   DEVICE_VENDOR := CalAmp

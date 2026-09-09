@@ -1,0 +1,105 @@
+From 8c9bcc83a996813bdc0e683ec0b487d87da4765c Mon Sep 17 00:00:00 2001
+From: AaronElijah <aaronzakelijah@googlemail.com>
+Date: Mon, 31 Aug 2026 11:44:31 +0100
+Subject: [PATCH] fix: change uart_base depending on selected CONSOLE
+
+---
+ Makefile                                      |  6 ++++--
+ configs/sam9x75_routercore_nf_uboot_defconfig | 11 +++++++++++
+ device/sam9x7/sam9x7.c                        |  6 ++++--
+ driver/at91_usart.c                           |  2 +-
+ include/backup.h                              |  3 ++-
+ 5 files changed, 22 insertions(+), 6 deletions(-)
+ create mode 100644 configs/sam9x75_routercore_nf_uboot_defconfig
+
+diff --git a/Makefile b/Makefile
+index c38088b..2c4968b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -260,7 +260,9 @@ GC_SECTIONS=--gc-sections
+ # For example, Yocto Project can pass the sysroot
+ NOSTDINC_FLAGS := -nostdinc -isystem "$(shell "$(CC)" $(EXTRA_CC_ARGS) -print-file-name=include)"
+ 
+-CPPFLAGS=$(EXTRA_CC_ARGS) $(NOSTDINC_FLAGS) -ffunction-sections -g -Os -Wall \
++OPTFLAGS ?= -Os
++
++CPPFLAGS=$(EXTRA_CC_ARGS) $(NOSTDINC_FLAGS) -ffunction-sections -g3 $(OPTFLAGS) -Wall \
+ 	-mno-unaligned-access \
+ 	-fno-stack-protector -fno-common -fno-builtin -fno-jump-tables -fno-pie \
+ 	-I$(INCL) -Iinclude -Ifs/include -Ifast-boot\
+@@ -268,7 +270,7 @@ CPPFLAGS=$(EXTRA_CC_ARGS) $(NOSTDINC_FLAGS) -ffunction-sections -g -Os -Wall \
+ 	-include $(CONFIG)/at91bootstrap-config/autoconf.h \
+ 	-DAT91BOOTSTRAP_VERSION=\"$(VERSION)$(SCMINFO)\" -DCOMPILE_TIME="\"$(BUILD_DATE)\""
+ 
+-ASFLAGS=$(EXTRA_CC_ARGS) -g -Os -Wall -I$(INCL) -Iinclude -include $(CONFIG)/at91bootstrap-config/autoconf.h
++ASFLAGS=$(EXTRA_CC_ARGS) -g3 ${OPTFLAGS} -Wall -I$(INCL) -Iinclude -include $(CONFIG)/at91bootstrap-config/autoconf.h
+ 
+ include	toplevel_cpp.mk
+ include	device/device_cpp.mk
+diff --git a/configs/sam9x75_routercore_nf_uboot_defconfig b/configs/sam9x75_routercore_nf_uboot_defconfig
+new file mode 100644
+index 0000000..5db0a16
+--- /dev/null
++++ b/configs/sam9x75_routercore_nf_uboot_defconfig
+@@ -0,0 +1,11 @@
++CONFIG_SAM9X7=y
++CONFIG_CONSOLE_INDEX=8
++CONFIG_DEBUG=y
++CONFIG_DEBUG_VERY_LOUD=y
++CONFIG_DDR_SET_BY_DEVICE=y
++CONFIG_DDR_W632GU6NB12I=y
++CONFIG_NANDFLASH=y
++CONFIG_NAND_TIMING_MODE=y
++CONFIG_NAND_DMA_SUPPORT=y
++CONFIG_IMG_SIZE="0x00100000"
++CONFIG_SHDWC=y
+diff --git a/device/sam9x7/sam9x7.c b/device/sam9x7/sam9x7.c
+index dcd1277..08b1fa1 100644
+--- a/device/sam9x7/sam9x7.c
++++ b/device/sam9x7/sam9x7.c
+@@ -129,11 +129,13 @@ static void at91_dbgu_hw_init(void)
+ #if CONFIG_CONSOLE_INDEX == 0
+ 	pmc_enable_periph_clock(AT91C_ID_DBGU, PMC_PERIPH_CLK_DIVIDER_NA);
+ #else
+-	usart_base = flexcoms[FLEXCOM_USART_INDEX].addr;
++	pmc_enable_periph_clock(flexcoms[FLEXCOM_USART_INDEX].id, PMC_PERIPH_CLK_DIVIDER_NA);
++
++	usart_base = flexcoms[FLEXCOM_USART_INDEX].addr + AT91C_OFFSET_FLEXCOM_USART;
++
+ 	flexcoms[FLEXCOM_USART_INDEX].mode = FLEXCOM_USART;
+ 	flexcoms[FLEXCOM_USART_INDEX].addr = usart_base - AT91C_OFFSET_FLEXCOM_USART;
+ 	flexcom_init(FLEXCOM_USART_INDEX);
+-	pmc_enable_periph_clock(flexcoms[FLEXCOM_USART_INDEX].id, PMC_PERIPH_CLK_DIVIDER_NA);
+ #endif
+ }
+ 
+diff --git a/driver/at91_usart.c b/driver/at91_usart.c
+index 4c9da78..80c258f 100644
+--- a/driver/at91_usart.c
++++ b/driver/at91_usart.c
+@@ -9,7 +9,7 @@
+ #ifdef CONFIG_USART
+ 
+ #ifdef CONFIG_CONSOLE_INDEX
+-extern const unsigned int usart_base;
++extern unsigned int usart_base;
+ #define USART_BASE usart_base
+ #else
+ #define USART_BASE	AT91C_BASE_DBGU
+diff --git a/include/backup.h b/include/backup.h
+index d73e1c7..ded4015 100644
+--- a/include/backup.h
++++ b/include/backup.h
+@@ -17,7 +17,8 @@ extern unsigned long backup_mode_resume(void);
+ 	static inline void backup_get_calibration_data(unsigned int *data, unsigned int len) { }
+ #endif /* CONFIG_PUBL */
+ #else
+-	static inline int backup_resume(void) { return 0; }
++	// static inline int backup_resume(void) { return 0; }
++	#define backup_resume() 0
+ 	static inline void backup_get_calibration_data(unsigned int *data, unsigned int len) { }
+ #endif
+ 
+-- 
+2.55.0
+
