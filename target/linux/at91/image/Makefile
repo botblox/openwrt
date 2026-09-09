@@ -11,6 +11,25 @@ define Build/at91-install-zImage
 	$(CP) $(KDIR)/zImage $@
 endef
 
+define Build/append-at91bootstrap
+	dd if=$(AT91BOOTSTRAP_PATH) >> $@
+endef
+
+# Preserve erased NAND contents in reserved regions such as U-Boot environment.
+define Build/pad-to-erased
+	size="$$(wc -c < "$@")"; \
+	target="$$(( $(call exp_units,$(1)) ))"; \
+	if [ "$$size" -gt "$$target" ]; then \
+		echo "ERROR: Image file $@ is too big: $$size > $$target" >&2; \
+		exit 1; \
+	fi; \
+	padding="$$((target - size))"; \
+	if [ "$$padding" -gt 0 ]; then \
+		dd if=/dev/zero bs="$$padding" count=1 2>/dev/null | \
+			tr '\000' '\377' >> "$@"; \
+	fi
+endef
+
 include $(SUBTARGET).mk
 
 AT91_SD_BOOT_PARTSIZE:=64

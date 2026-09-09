@@ -1,28 +1,46 @@
-# BotBlox-specific release flow
+# Rugged SOM release flow
 
 ## Quickstart
 
-1. Run `./scripts/feeds update -a` to obtain all the latest package definitions
-   defined in feeds.conf / feeds.conf.default
-2. Run `./scripts/feeds install -a` to install symlinks for all obtained
-   packages into package/feeds/
-3. Follow instructions [here](https://github.com/botblox/luci-theme-botblox/blob/master/README.md) to make custom BotBlox Luci theme available
-4. To reproduce the BotBlox build configuration, apply `bb-diffconfig`
-   file instead of selecting options manually in `make menuconfig` (unless you are targeting a specific build)
+1. Check out the exact OpenWrt commit associated with the release. Download the
+   `feeds.buildinfo` published with that release and use it as the feed
+   configuration. Its entries pin every feed to the commit used for the
+   release build:
 
    ```
-   cp bb-diffconfig .config
+   cp /path/to/release/feeds.buildinfo feeds.conf
+   ./scripts/feeds update -a
+   ```
+
+   Do not replace this with an unpinned feed configuration or use a
+   `feeds.buildinfo` from another release. If no release file is available,
+   `feeds.conf.default` is only reproducible when every `src-git` entry ends in
+   an explicit `^<commit>` revision.
+
+2. Install symlinks for the packages from those pinned feeds:
+
+   ```
+   ./scripts/feeds install -a
+   ```
+3. Follow instructions [here](https://github.com/botblox/luci-theme-botblox/blob/master/README.md) to make custom BotBlox Luci theme available
+4. To reproduce a BotBlox build configuration, apply 
+   `bb-diffconfig-ruggedsom` for Rugged SOM, BB-SOM-B-1
+   `bb-diffconfig-routercore` for RouterCore (top board), BB-RPMTOP-A-1
+   instead of selecting options manually in `make menuconfig` (unless you are targeting a specific build)
+
+   ```
+   cp bb-diffconfig-ruggedsom .config
    make defconfig
    ```
 
-   `bb-diffconfig` is generated with `./scripts/diffconfig.sh` and captures the
+   `bb-diffconfig-ruggedsom` is generated with `./scripts/diffconfig.sh` and captures the
    BotBlox-specific OpenWrt configuration delta. `make defconfig` expands this into a full `.config` with the correct defaults for this tree.
 
-5. If you want to adjust after applying `bb-diffconfig`, run `make menuconfig`. If you make changes and want to preserve them for future reproducible builds, regenerate
+5. If you want to adjust after applying `bb-diffconfig-ruggedsom`, run `make menuconfig`. If you make changes and want to preserve them for future reproducible builds, regenerate
    diffconfig:
 
    ```
-   ./scripts/diffconfig.sh > bb-diffconfig
+   ./scripts/diffconfig.sh > bb-diffconfig-ruggedsom
    ```
 
 6. Run `make` to build your firmware. This will download all sources, build the
@@ -112,6 +130,53 @@ We need to add the following to every release.
 - partitioned image file containing uboot bootloader binary, boot partition (kernel/device tree blob) and rootfs
 
 In future, we may simplify things by just using a FIT image.
+
+# Routercore release flow
+
+## Default login
+
+Log in as `root` with the default password `botblox`. Change this password
+immediately after the first login by running `passwd`.
+
+## Changes made
+
+Changes were made to the at91bootstrap SPL, uboot-at91, and linux packages to port to this board. 
+
+### at91bootstrap
+
+For this package, we ensured that
+- Use FLEXCOM7_USART (CONFIG_CONSOLE_INDEX=8) for the debug output
+- Make sure that debug console hardware init code `at91_dbgu_hw_init` enabled the FLEXCOM7 USART peripheral clock
+- Made sure that the `uart_base` UART registers were set to the FLEXCOM7 UART registers
+- We do not use PMECC autodetect using ONFI feature in NAND controller. This is because we already know the PMECC values for the NAND chip (rev A uses MT29F8G08ABAC variants)
+with 4096KB page size, 224 spare size for OOB, 8 ECC bits, and 512KB sector size. 
+- By hardcoding these values, we can create not just the at91bootstrap.bin but at91boostrap.bin.pmecc which has these values encoded in a header (0xc1e04e07) 52x. Means we can prepend this to other binaries to get a final flash image.
+- We set the `CONFIG_IMG_SIZE=0x100000` and `CONFIG_IMG_ADDRESS="0x00040000"` to basically say load the binary at address 0x40000 with a size
+0x100000 into `CONFIG_JUMP_ADDR="0x23F00000"` which is a RAM address. This is where uboot should go.
+
+### uboot-at91
+
+- Create out own routercore board with devicetree and defconfig.
+- Make sure to set the `CFG_UART_BASE` to FLEXCOM7 again.
+- Ensure that the DEBUG UART is set to FLEXCOM7 in `board_dbgu0_hw_init`.
+- Assumed in at91bootstrap that the uboot will be flashed at 0x40000 + 0x100000 (size) so the 
+primary uboot env environment sits at 0x140000. The secondary env at 0x180000.
+- Make sure that the `CONFIG_ENV_RANGE=0x40000`, which is equal to the block size of the NAND chip (256KB).
+- Correctly set the CONFIG_BOOTARGS to assume a NAND flash layout of 
+
+0x000000  AT91Bootstrap with PMECC header
+0x040000  U-Boot
+0x140000  Primary environment, erased
+0x180000  Redundant environment, erased
+0x1c0000  FIT image (kernel + dtb)
+0x800000  UBI root filesystem
+
+- Ensure that the boot command uses `bootm` for a FIT file (.itb)
+
+### linux-at91
+
+- Device drivers for the MV88E6393X are enabled
+- Include the device tree for routercore
 
 ## License
 

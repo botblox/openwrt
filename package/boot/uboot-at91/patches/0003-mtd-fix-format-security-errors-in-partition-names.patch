@@ -1,0 +1,41 @@
+From 93d9ec1351e26ed4696f5aa549c18afb3caa24e8 Mon Sep 17 00:00:00 2001
+From: Aaron Elijah <aaronzakelijah@googlemail.com>
+Date: Mon, 28 Sep 2026 16:15:14 +0100
+Subject: [PATCH 3/5] mtd: fix format-security errors in partition names
+
+Treat MTD partition and UBI volume names as strings rather than format
+strings. This fixes -Werror=format-security build failures.
+---
+ drivers/mtd/mtdpart.c  | 2 +-
+ drivers/mtd/ubi/part.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mtd/mtdpart.c b/drivers/mtd/mtdpart.c
+index 842d3e7274e..9a6edf982ad 100644
+--- a/drivers/mtd/mtdpart.c
++++ b/drivers/mtd/mtdpart.c
+@@ -1088,7 +1088,7 @@ static int __maybe_unused part_get_info_mtd(struct blk_desc *dev_desc, int part_
+ 		return -EINVAL;
+ 	}
+ 
+-	snprintf(info->name, PART_NAME_LEN, part->name);
++	snprintf(info->name, PART_NAME_LEN, "%s", part->name);
+ 	info->start = part->offset / dev_desc->blksz;
+ 	info->size = part->size / dev_desc->blksz;
+ 	info->blksz = dev_desc->blksz;
+diff --git a/drivers/mtd/ubi/part.c b/drivers/mtd/ubi/part.c
+index 6c017eb7299..aff0b109b70 100644
+--- a/drivers/mtd/ubi/part.c
++++ b/drivers/mtd/ubi/part.c
+@@ -49,7 +49,7 @@ static int __maybe_unused part_get_info_ubi(struct blk_desc *dev_desc, int part_
+ 	if (!vol)
+ 		return -ENOENT;
+ 
+-	snprintf(info->name, PART_NAME_LEN, vol->name);
++	snprintf(info->name, PART_NAME_LEN, "%s", vol->name);
+ 
+ 	info->start = 0;
+ 	info->size = (unsigned long)vol->used_bytes / dev_desc->blksz;
+-- 
+2.52.0
+

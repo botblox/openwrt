@@ -1,0 +1,357 @@
+From aea7d469d17c5d9a3c635924019d59abf64bb372 Mon Sep 17 00:00:00 2001
+From: AaronElijah <aaronzakelijah@googlemail.com>
+Date: Mon, 28 Sep 2026 17:59:51 +0100
+Subject: [PATCH 4/5] feat: disable mv88e6393x ports on left/right switches
+ during board init
+
+- Prevent unmanaged switch forwarding before second application (linux kernel -> openwrt) can take ownership of the hardware
+---
+ .../sam9x75_routercore/sam9x75_routercore.c   | 113 ++++++++++++++++++
+ drivers/net/macb.c                            |  94 ++++++++++++++-
+ drivers/net/mv88e6xxx.c                       |  33 ++++-
+ 3 files changed, 236 insertions(+), 4 deletions(-)
+
+diff --git a/board/atmel/sam9x75_routercore/sam9x75_routercore.c b/board/atmel/sam9x75_routercore/sam9x75_routercore.c
+index 8fa1cb37660..02775e71489 100644
+--- a/board/atmel/sam9x75_routercore/sam9x75_routercore.c
++++ b/board/atmel/sam9x75_routercore/sam9x75_routercore.c
+@@ -13,9 +13,12 @@
+ #include <asm/arch/clk.h>
+ #include <asm/arch/gpio.h>
+ #include <debug_uart.h>
++#include <dm.h>
+ #include <asm/mach-types.h>
+ #include <init.h>
+ #include <linux/delay.h>
++#include <log.h>
++#include <net/dsa.h>
+ #include <dt-bindings/mfd/atmel-flexcom.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+@@ -62,8 +65,118 @@ int board_init(void)
+ }
+ 
+ #if (IS_ENABLED(CONFIG_MISC_INIT_R))
++static int routercore_disable_switch_ports(struct udevice *dev)
++{
++	struct dsa_pdata *pdata;
++	struct dsa_ops *ops;
++	int port;
++
++	log_notice("Disabling switch ports: dev=%p\n", dev);
++	if (!dev) {
++		log_err("Cannot disable switch ports: dev is NULL\n");
++		return -ENODEV;
++	}
++
++	if (!dev->name) {
++		log_err("Cannot disable switch ports: dev=%p has a NULL name\n", dev);
++		return -ENODEV;
++	}
++
++	if (!dev->driver || !dev->driver->ops) {
++		log_err("Cannot disable switch ports: dev=%p (%s) has no driver ops\n",
++			dev, dev->name);
++		return -ENOSYS;
++	}
++
++	ops = dsa_get_ops(dev);
++
++	if (!ops->port_disable) {
++		log_err("Cannot disable switch ports: dev=%p (%s) has no port_disable op\n",
++			dev, dev->name);
++		return -ENOSYS;
++	}
++
++	pdata = dev_get_uclass_plat(dev);
++	if (!pdata) {
++		log_err("Cannot disable switch ports: dev=%p (%s) has no DSA platform data\n",
++			dev, dev->name);
++		return -ENODEV;
++	}
++
++	if (pdata->num_ports <= 0 || pdata->num_ports > DSA_MAX_PORTS) {
++		log_err("Cannot disable switch ports: dev=%p (%s) has invalid port count %d\n",
++			dev, dev->name, pdata->num_ports);
++		return -EINVAL;
++	}
++
++	for (port = 0; port < pdata->num_ports; port++) {
++		log_notice("Disabling port %d on switch dev=%p (%s)\n",
++			   port, dev, dev->name);
++		ops->port_disable(dev, port, NULL);
++	}
++	log_notice("Issued disable requests for %d ports on dev=%p (%s)\n",
++		   pdata->num_ports, dev, dev->name);
++
++	return 0;
++}
++
+ int misc_init_r(void)
+ {
++	struct udevice *dev = NULL;
++	int ret;
++
++	log_notice("Looking up first DSA switch: dev=%p\n", dev);
++	ret = uclass_first_device_err(UCLASS_DSA, &dev);
++	log_notice("First DSA switch lookup result: ret=%d dev=%p\n", ret, dev);
++	if (ret) {
++		log_err("Failed to get first DSA switch: ret=%d dev=%p\n", ret, dev);
++		return ret;
++	}
++	if (!dev) {
++		log_err("First DSA switch lookup succeeded with a NULL dev\n");
++		return -ENODEV;
++	}
++	if (!dev->name) {
++		log_err("First DSA switch dev=%p has a NULL name\n", dev);
++		return -ENODEV;
++	}
++	log_notice("First DSA switch: dev=%p name=%s\n", dev, dev->name);
++	ret = routercore_disable_switch_ports(dev);
++	if (ret) {
++		log_err("Failed to disable first DSA switch: ret=%d dev=%p name=%s\n",
++			ret, dev, dev->name);
++		return ret;
++	}
++	log_notice("Disabled ports on first switch: dev=%p name=%s\n",
++		   dev, dev->name);
++
++	/* Get the second switch chip. */
++	log_notice("Looking up second DSA switch after dev=%p (%s)\n",
++		   dev, dev->name);
++	ret = uclass_next_device_err(&dev);
++	log_notice("Second DSA switch lookup result: ret=%d dev=%p\n", ret, dev);
++	if (ret) {
++		log_err("Failed to get second DSA switch: ret=%d dev=%p\n", ret, dev);
++		return ret;
++	}
++	if (!dev) {
++		log_err("Second DSA switch lookup succeeded with a NULL dev\n");
++		return -ENODEV;
++	}
++	if (!dev->name) {
++		log_err("Second DSA switch dev=%p has a NULL name\n", dev);
++		return -ENODEV;
++	}
++	log_notice("Second DSA switch: dev=%p name=%s\n", dev, dev->name);
++	ret = routercore_disable_switch_ports(dev);
++	if (ret) {
++		log_err("Failed to disable second DSA switch: ret=%d dev=%p name=%s\n",
++			ret, dev, dev->name);
++		return ret;
++	}
++	log_notice("Disabled ports on second switch: dev=%p name=%s\n",
++		   dev, dev->name);
++
+ 	return 0;
+ }
+ #endif
+diff --git a/drivers/net/macb.c b/drivers/net/macb.c
+index 7e0eca6726a..ce0fd062f87 100644
+--- a/drivers/net/macb.c
++++ b/drivers/net/macb.c
+@@ -5,6 +5,7 @@
+ #include <clk.h>
+ #include <cpu_func.h>
+ #include <dm.h>
++#include <dm/lists.h>
+ #include <log.h>
+ #include <asm/global_data.h>
+ #include <linux/delay.h>
+@@ -275,6 +276,95 @@ int macb_miiphy_write(struct mii_dev *bus, int phy_adr, int devad, int reg,
+ }
+ #endif
+ 
++#ifdef CONFIG_DM_MDIO
++struct dm_macb_mdio_priv {
++	struct macb_device *macb;
++};
++
++static int dm_macb_mdio_read(struct udevice *dev, int addr, int devad, int reg)
++{
++	struct dm_macb_mdio_priv *priv = dev_get_priv(dev);
++
++	if (!priv || !priv->macb)
++		return -ENODEV;
++
++	arch_get_mdio_control(dev->parent->name);
++
++	return macb_mdio_read(priv->macb, addr, reg);
++}
++
++static int dm_macb_mdio_write(struct udevice *dev, int addr, int devad,
++			      int reg, u16 value)
++{
++	struct dm_macb_mdio_priv *priv = dev_get_priv(dev);
++
++	if (!priv || !priv->macb)
++		return -ENODEV;
++
++	arch_get_mdio_control(dev->parent->name);
++	macb_mdio_write(priv->macb, addr, reg, value);
++
++	return 0;
++}
++
++static const struct mdio_ops dm_macb_mdio_ops = {
++	.read = dm_macb_mdio_read,
++	.write = dm_macb_mdio_write,
++};
++
++static int dm_macb_mdio_probe(struct udevice *dev)
++{
++	struct dm_macb_mdio_priv *priv = dev_get_priv(dev);
++
++	if (!priv || !dev->parent)
++		return -ENODEV;
++
++	priv->macb = dev_get_priv(dev->parent);
++	if (!priv->macb)
++		return -ENODEV;
++
++	return 0;
++}
++
++U_BOOT_DRIVER(macb_mdio) = {
++	.name		= "macb_mdio",
++	.id		= UCLASS_MDIO,
++	.probe		= dm_macb_mdio_probe,
++	.ops		= &dm_macb_mdio_ops,
++	.priv_auto	= sizeof(struct dm_macb_mdio_priv),
++};
++
++static int dm_macb_bind_mdio(struct udevice *dev)
++{
++	struct udevice *mdiodev;
++	const char *name;
++	ofnode mdio;
++	int ret;
++
++	/*
++	 * Bind the internal MDIO bus manually because its DT node has no
++	 * compatible string. The MDIO uclass post-bind hook will scan its
++	 * children and bind the devices on the bus.
++	 */
++	ofnode_for_each_subnode(mdio, dev_ofnode(dev)) {
++		name = ofnode_get_name(mdio);
++
++		if (strcmp(name, "mdio"))
++			continue;
++
++		ret = device_bind_driver_to_node(dev, "macb_mdio", name, mdio,
++						 &mdiodev);
++		if (ret)
++			printf("%s: failed to bind %s: %d\n", __func__, name,
++			       ret);
++
++		return ret;
++	}
++
++	return 0;
++}
++#endif
++
+ #define RX	1
+ #define TX	0
+ static inline void macb_invalidate_ring_desc(struct macb_device *macb, bool rx)
+@@ -1268,7 +1358,6 @@ static int macb_eth_probe(struct udevice *dev)
+ #endif
+ 
+ 	_macb_eth_initialize(macb);
+-
+ #if defined(CONFIG_CMD_MII) || defined(CONFIG_PHYLIB)
+ 	macb->bus = mdio_alloc();
+ 	if (!macb->bus)
+@@ -1411,6 +1500,9 @@ U_BOOT_DRIVER(eth_macb) = {
+ 	.id	= UCLASS_ETH,
+ 	.of_match = macb_eth_ids,
+ 	.of_to_plat = macb_eth_of_to_plat,
++#ifdef CONFIG_DM_MDIO
++	.bind	= dm_macb_bind_mdio,
++#endif
+ 	.probe	= macb_eth_probe,
+ 	.remove	= macb_eth_remove,
+ 	.ops	= &macb_eth_ops,
+diff --git a/drivers/net/mv88e6xxx.c b/drivers/net/mv88e6xxx.c
+index 557b6b2c8f6..9e6c3a9f0f0 100644
+--- a/drivers/net/mv88e6xxx.c
++++ b/drivers/net/mv88e6xxx.c
+@@ -153,6 +153,7 @@
+ #define PORT_SWITCH_ID_6250		0x2500
+ #define PORT_SWITCH_ID_6320		0x1150
+ #define PORT_SWITCH_ID_6352		0x3520
++#define PORT_SWITCH_ID_6393X		0x3930
+ 
+ struct mv88e6xxx_priv {
+ 	int smi_addr;
+@@ -430,6 +431,7 @@ static bool mv88e6xxx_6352_family(struct udevice *dev)
+ 	case PORT_SWITCH_ID_6176:
+ 	case PORT_SWITCH_ID_6240:
+ 	case PORT_SWITCH_ID_6352:
++	case PORT_SWITCH_ID_6393X:
+ 		return true;
+ 	}
+ 	return false;
+@@ -521,9 +523,23 @@ static int mv88e6xxx_priv_reg_offs_pre_init(struct udevice *dev)
+ {
+ 	struct mv88e6xxx_priv *priv = dev_get_priv(dev);
+ 
++
+ 	/*
+ 	 * Initial 'port_reg_base' value must be an offset of existing
+ 	 * port register, then reading the ID should succeed. First, try
++	 * to read via port registers with device address 0x00 (88E6393X).
++	 */
++	priv->port_reg_base = 0x00;
++	priv->id = mv88e6xxx_get_switch_id(dev);
++	if (priv->id == PORT_SWITCH_ID_6393X) {
++		priv->global1 = 0x1b;
++		priv->global2 = 0x1c;
++		return 0;
++	}
++
++	/*
++	 * Initial 'port_reg_base' value must be an offset of existing
++	 * port register, then reading the ID should succeed. Try
+ 	 * to read via port registers with device address 0x10 (88E6096
+ 	 * and compatible switches).
+ 	 */
+@@ -696,13 +712,23 @@ static void mv88e6xxx_port_disable(struct udevice *dev, int port, struct phy_dev
+ {
+ 	int val;
+ 
+-	dev_dbg(dev, "%s P%d phy:0x%08x %s\n", __func__, port,
+-		phy->phy_id, phy_string_for_interface(phy->interface));
++	if (phy)
++		dev_dbg(dev, "%s P%d phy:0x%08x %s\n", __func__, port,
++			phy->phy_id, phy_string_for_interface(phy->interface));
++	else
++		dev_dbg(dev, "%s P%d\n", __func__, port);
+ 
+ 	val = mv88e6xxx_port_read(dev, port, PORT_REG_CTRL);
++	if (val < 0) {
++		dev_err(dev, "Failed to read control register for port %d: %d\n",
++			port, val);
++		return;
++	}
+ 	val &= ~(PORT_REG_CTRL_PSTATE_MASK << PORT_REG_CTRL_PSTATE_SHIFT);
+ 	val |= (PORT_REG_CTRL_PSTATE_DISABLED << PORT_REG_CTRL_PSTATE_SHIFT);
+-	mv88e6xxx_port_write(dev, port, PORT_REG_CTRL, val);
++	val = mv88e6xxx_port_write(dev, port, PORT_REG_CTRL, val);
++	if (val < 0)
++		dev_err(dev, "Failed to disable port %d: %d\n", port, val);
+ }
+ 
+ static const struct dsa_ops mv88e6xxx_dsa_ops = {
+@@ -778,6 +804,7 @@ static int mv88e6xxx_probe(struct udevice *dev)
+ 	case PORT_SWITCH_ID_6176:
+ 	case PORT_SWITCH_ID_6240:
+ 	case PORT_SWITCH_ID_6352:
++	case PORT_SWITCH_ID_6393X:
+ 		priv->port_count = 11;
+ 		break;
+ 	case PORT_SWITCH_ID_6020:
+-- 
+2.52.0
+

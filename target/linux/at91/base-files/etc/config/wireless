@@ -1,0 +1,2 @@
+# RouterCore has no configured wireless hardware yet (we have CC3300 but not using). Keep this file present to
+# prevent the base-files boot script from waiting for legacy wireless setup.

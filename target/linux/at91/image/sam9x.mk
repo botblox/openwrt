@@ -121,6 +121,32 @@ define Device/microchip_sam9x60ek
 endef
 TARGET_DEVICES += microchip_sam9x60ek
 
+define Device/botblox_routercore
+  $(Device/evaluation-dtb)
+  DEVICE_VENDOR := BotBlox
+  DEVICE_MODEL := RouterCore
+  DEVICE_COMPAT_VERSION := 1.0
+  DEVICE_DTS := at91-sam9x75_routercore
+  BOARD_NAME := botblox,sam9x75-routercore
+  SUPPORTED_DEVICES := botblox,sam9x75-routercore
+  DEVICE_PACKAGES += uboot-envtools
+  FILESYSTEMS := ubifs
+  KERNEL_SIZE := 6400k
+  BLOCKSIZE := 256k
+  PAGESIZE := 4096
+  SUBPAGESIZE := 4096
+  NAND_SIZE := 1024m
+  MKUBIFS_OPTS := -m $$(PAGESIZE) -e 248KiB -c 4096
+  AT91BOOTSTRAP_PATH := $$(STAGING_DIR_IMAGE)/sam9x75_routercore_nf_uboot-at91bootstrap.bin.pmecc
+  UBOOT_PATH := $$(STAGING_DIR_IMAGE)/sam9x75_routercore_nandflash-u-boot.bin
+  IMAGES += factory.bin uboot-factory.bin at91bootstrap-uboot-factory.bin sysupgrade.bin
+  IMAGE/factory.bin := append-kernel | pad-to $$$$(KERNEL_SIZE) | append-ubi
+  IMAGE/uboot-factory.bin := append-uboot | pad-to-erased 1536k | append-kernel | pad-to-erased 7936k | append-ubi
+  IMAGE/at91bootstrap-uboot-factory.bin := append-at91bootstrap | pad-to-erased 256k | append-uboot | pad-to-erased 1792k | append-kernel | pad-to-erased 8192k | append-ubi
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += botblox_routercore
+
 define Device/calamp_lmu5000
   $(Device/production)
   DEVICE_VENDOR := CalAmp

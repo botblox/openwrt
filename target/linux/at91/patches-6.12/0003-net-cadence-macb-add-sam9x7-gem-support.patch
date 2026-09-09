@@ -1,0 +1,62 @@
+Subject: [PATCH] net: macb: add SAM9X7 GEM support
+
+Add the SAM9X7-specific GEM capabilities and OF match entry. SAM9X7
+uses the SAMA7G5 USRIO layout, but additionally requires the default
+MII/GMII selection and CLKEN capabilities.
+
+Also allow boards using an external reference clock to describe that
+integration with the cdns,refclk-ext property.
+
+---
+ drivers/net/ethernet/cadence/macb_main.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+--- a/drivers/net/ethernet/cadence/macb_main.c
++++ b/drivers/net/ethernet/cadence/macb_main.c
+@@ -4048,7 +4048,11 @@ static const struct net_device_ops at91e
+ static void macb_configure_caps(struct macb *bp,
+ 				const struct macb_config *dt_conf)
+ {
++	struct device_node *np = bp->pdev->dev.of_node;
++	bool refclk_ext;
+ 	u32 dcfg;
++
++	refclk_ext = of_property_read_bool(np, "cdns,refclk-ext");
+ 
+ 	if (dt_conf)
+ 		bp->caps = dt_conf->caps;
+@@ -4080,6 +4083,9 @@ static void macb_configure_caps(struct m
+ 		}
+ 	}
+ 
++	if (refclk_ext)
++		bp->caps |= MACB_CAPS_USRIO_HAS_CLKEN;
++
+ 	dev_dbg(&bp->pdev->dev, "Cadence caps 0x%08x\n", bp->caps);
+ }
+ 
+@@ -5041,6 +5047,16 @@ static const struct macb_config sama7g5_
+ 	.usrio = &sama7g5_usrio,
+ };
+ 
++static const struct macb_config sam9x7_gem_config = {
++	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE | MACB_CAPS_CLK_HW_CHG |
++		MACB_CAPS_USRIO_DEFAULT_IS_MII_GMII | MACB_CAPS_USRIO_HAS_CLKEN |
++		MACB_CAPS_MIIONRGMII | MACB_CAPS_GEM_HAS_PTP,
++	.dma_burst_length = 16,
++	.clk_init = macb_clk_init,
++	.init = macb_init,
++	.usrio = &sama7g5_usrio,
++};
++
+ static const struct macb_config sama7g5_emac_config = {
+ 	.caps = MACB_CAPS_USRIO_DEFAULT_IS_MII_GMII |
+ 		MACB_CAPS_USRIO_HAS_CLKEN | MACB_CAPS_MIIONRGMII |
+@@ -5080,6 +5096,7 @@ static const struct of_device_id macb_dt
+ 	{ .compatible = "cdns,zynq-gem", .data = &zynq_config }, /* deprecated */
+ 	{ .compatible = "sifive,fu540-c000-gem", .data = &fu540_c000_config },
+ 	{ .compatible = "microchip,mpfs-macb", .data = &mpfs_config },
++	{ .compatible = "microchip,sam9x7-gem", .data = &sam9x7_gem_config },
+ 	{ .compatible = "microchip,sama7g5-gem", .data = &sama7g5_gem_config },
+ 	{ .compatible = "microchip,sama7g5-emac", .data = &sama7g5_emac_config },
+ 	{ .compatible = "xlnx,zynqmp-gem", .data = &zynqmp_config},
