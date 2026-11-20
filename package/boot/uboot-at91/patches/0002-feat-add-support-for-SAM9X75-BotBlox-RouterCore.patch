@@ -5,7 +5,7 @@ Subject: [PATCH 2/5] feat: add support for SAM9X75 BotBlox RouterCore
 
 ---
  .../dts/at91-sam9x75_routercore-u-boot.dtsi   |  96 +++
- arch/arm/dts/at91-sam9x75_routercore.dts      | 808 ++++++++++++++++++
+ arch/arm/dts/at91-sam9x75_routercore.dts      | 810 ++++++++++++++++++
  arch/arm/mach-at91/Kconfig                    |   7 +
  board/atmel/sam9x75_routercore/Kconfig        |  15 +
  board/atmel/sam9x75_routercore/MAINTAINERS    |   8 +
@@ -14,7 +14,7 @@ Subject: [PATCH 2/5] feat: add support for SAM9X75 BotBlox RouterCore
  .../sam9x75_curiosity_pro_nandflash_defconfig |   2 +-
  .../sam9x75_routercore_nandflash_defconfig    | 123 +++
  include/configs/sam9x75_routercore.h          |  23 +
- 10 files changed, 1162 insertions(+), 1 deletion(-)
+ 10 files changed, 1164 insertions(+), 1 deletion(-)
  create mode 100644 arch/arm/dts/at91-sam9x75_routercore-u-boot.dtsi
  create mode 100644 arch/arm/dts/at91-sam9x75_routercore.dts
  create mode 100644 board/atmel/sam9x75_routercore/Kconfig
@@ -128,10 +128,10 @@ index 00000000000..0a60b061344
 +};
 diff --git a/arch/arm/dts/at91-sam9x75_routercore.dts b/arch/arm/dts/at91-sam9x75_routercore.dts
 new file mode 100644
-index 00000000000..190bcb647a6
+index 00000000000..e7abaf44acb
 --- /dev/null
 +++ b/arch/arm/dts/at91-sam9x75_routercore.dts
-@@ -0,0 +1,808 @@
+@@ -0,0 +1,810 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * at91-sam9x75_routercore.dts - Device Tree file for BotBlox SAM9X75 RouterCore board
@@ -437,6 +437,7 @@ index 00000000000..190bcb647a6
 +		switchl0: ethernet-switch@2 {
 +			compatible = "marvell,mv88e6190";
 +			reg = <0x02>;
++			reset-gpios = <&pioC 19 GPIO_ACTIVE_LOW>;
 +			dsa,member = <0 0>;
 +			status = "okay";
 +
@@ -577,6 +578,7 @@ index 00000000000..190bcb647a6
 +		switchr0: ethernet-switch@4 {
 +			compatible = "marvell,mv88e6190";
 +			reg = <0x04>;
++			reset-gpios = <&pioC 26 GPIO_ACTIVE_LOW>;
 +			dsa,member = <0 1>;
 +			status = "okay";
 +
