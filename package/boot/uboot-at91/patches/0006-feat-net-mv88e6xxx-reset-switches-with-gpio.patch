@@ -1,0 +1,136 @@
+Subject: [PATCH 6/6] feat: net: mv88e6xxx: reset switches with GPIO
+
+Pulse (optional) reset GPIO after draining the switch ports and before
+the software reset. Hold reset for 20 ms and allow 20 ms for recovery.
+Wait for the 88E6393X EEPROM for both ends of the pulse.
+
+Allow active-low GPIO descriptors in AT91 driver. The GPIO uclass
+already translates the logical value before calling set_flags.
+
+---
+ drivers/gpio/at91_gpio.c |  4 +++-
+ drivers/net/mv88e6xxx.c  | 61 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 64 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpio/at91_gpio.c b/drivers/gpio/at91_gpio.c
+index 76fcd3fb930cf785687ffaf7b81f3d445682f0c4..93e1fee60c9decbfa764cbde38040c133b7886ba 100644
+--- a/drivers/gpio/at91_gpio.c
++++ b/drivers/gpio/at91_gpio.c
+@@ -602,7 +602,9 @@ static int at91_gpio_set_flags(struct udevice *dev, unsigned int offset,
+ 	struct at91_port_priv *port = dev_get_priv(dev);
+ 	ulong supported_mask;
+ 
+-	supported_mask = GPIOD_OPEN_DRAIN | GPIOD_MASK_DIR | GPIOD_PULL_UP;
++	/* The GPIO uclass has already applied the active-low polarity. */
++	supported_mask = GPIOD_ACTIVE_LOW | GPIOD_OPEN_DRAIN | GPIOD_MASK_DIR |
++			 GPIOD_PULL_UP;
+ 	if (flags & ~supported_mask)
+ 		return -ENOTSUPP;
+ 
+diff --git a/drivers/net/mv88e6xxx.c b/drivers/net/mv88e6xxx.c
+index 9e6c3a9f0f0028ec35afd607cd25c91a2713e04e..7d11c42e233ebadeb756146683617ff4d01a368f 100644
+--- a/drivers/net/mv88e6xxx.c
++++ b/drivers/net/mv88e6xxx.c
+@@ -23,6 +23,7 @@
+  * on the mv88e6176 via an SGMII interface.
+  */
+ 
++#include <asm/gpio.h>
+ #include <dm/device.h>
+ #include <dm/device_compat.h>
+ #include <dm/device-internal.h>
+@@ -30,6 +31,7 @@
+ #include <dm/of_extra.h>
+ #include <linux/bitfield.h>
+ #include <linux/delay.h>
++#include <linux/iopoll.h>
+ #include <miiphy.h>
+ #include <net/dsa.h>
+ 
+@@ -46,6 +48,7 @@
+ #define GLOBAL1_CTRL			0x04
+ 
+ /* Global 2 registers */
++#define GLOBAL2_REG_EEPROM_CMD		0x14
+ #define GLOBAL2_REG_PHY_CMD		0x18
+ #define GLOBAL2_REG_PHY_DATA		0x19
+ #define GLOBAL2_REG_SCRATCH		0x1A
+@@ -65,6 +68,10 @@
+ 
+ /* Register fields */
+ #define GLOBAL1_CTRL_SWRESET		BIT(15)
++#define GLOBAL2_EEPROM_CMD_BUSY		BIT(15)
++#define GLOBAL2_EEPROM_CMD_RUNNING	BIT(11)
++
++#define MV88E6XXX_RESET_DELAY_MS		20
+ 
+ #define PORT_REG_STATUS_SPEED_SHIFT	8
+ #define PORT_REG_STATUS_SPEED_10	0
+@@ -447,6 +454,52 @@ static int mv88e6xxx_get_cmode(struct udevice *dev, u8 port)
+ 	return res & PORT_REG_STATUS_CMODE_MASK;
+ }
+ 
++static int mv88e6xxx_wait_eeprom(struct udevice *dev)
++{
++	struct mv88e6xxx_priv *priv = dev_get_priv(dev);
++	int val, ret;
++
++	if (priv->id != PORT_SWITCH_ID_6393X)
++		return 0;
++
++	ret = read_poll_timeout(mv88e6xxx_reg_read, val,
++				val < 0 || !(val & (GLOBAL2_EEPROM_CMD_BUSY |
++						    GLOBAL2_EEPROM_CMD_RUNNING)),
++				1000, 50000, dev, priv->global2,
++				GLOBAL2_REG_EEPROM_CMD);
++
++	return val < 0 ? val : ret;
++}
++
++static int mv88e6xxx_switch_hardware_reset(struct udevice *dev)
++{
++	struct gpio_desc reset;
++	int ret, free_ret;
++
++	if (!CONFIG_IS_ENABLED(DM_GPIO))
++		return -ENOSYS;
++
++	/* A reset during an EEPROM load can interrupt the transaction. */
++	ret = mv88e6xxx_wait_eeprom(dev);
++	if (ret)
++		return ret;
++
++	ret = gpio_request_by_name(dev, "reset-gpios", 0, &reset,
++				   GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
++	if (ret)
++		return ret;
++
++	mdelay(MV88E6XXX_RESET_DELAY_MS);
++	ret = dm_gpio_set_value(&reset, 0);
++	if (!ret) {
++		mdelay(MV88E6XXX_RESET_DELAY_MS);
++		ret = mv88e6xxx_wait_eeprom(dev);
++	}
++
++	free_ret = dm_gpio_free(dev, &reset);
++	return ret ? ret : free_ret;
++}
++
+ static int mv88e6xxx_switch_reset(struct udevice *dev)
+ {
+ 	struct mv88e6xxx_priv *priv = dev_get_priv(dev);
+@@ -469,6 +522,14 @@ static int mv88e6xxx_switch_reset(struct udevice *dev)
+ 	/* Wait 2 ms for queues to drain */
+ 	udelay(2000);
+ 
++	if (dev_read_bool(dev, "reset-gpios")) {
++		val = mv88e6xxx_switch_hardware_reset(dev);
++		if (val) {
++			dev_err(dev, "Hardware reset failed: %d\n", val);
++			return val;
++		}
++	}
++
+ 	/* Reset switch */
+ 	val = mv88e6xxx_reg_read(dev, priv->global1, GLOBAL1_CTRL);
+ 	if (val < 0)
