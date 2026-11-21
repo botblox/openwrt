@@ -1,51 +1,72 @@
+# Setup
+
+Use this setup for both Rugged SOM and RouterCore. Run the commands from the
+root of the OpenWrt checkout.
+
+## Build host prerequisites
+
+This setup was validated on Fedora Linux. Before updating the package feeds,
+install the required build tools using OpenWrt’s
+[Fedora/Nobara instructions](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem#fedoranobara).
+
+If you use another Linux distribution, macOS, or Windows, follow the
+instructions for your platform in the
+[OpenWrt build system setup guide](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem).
+
+## Package feeds
+
+To reproduce a release, check out its exact OpenWrt commit and copy the
+`feeds.buildinfo` from that same release to `feeds.conf`. This pins each feed
+to the commit used for the release build.
+
+```sh
+cp /path/to/release/feeds.buildinfo feeds.conf
+```
+
+If the release file is unavailable, `./scripts/feeds` falls back to
+`feeds.conf.default` when `feeds.conf` is absent. For reproducible builds,
+every `src-git` entry in the configuration you use must end in an explicit
+`^<commit>` revision.
+
+Update the feeds, then install the package symlinks into the build tree.
+
+```sh
+./scripts/feeds update -a
+./scripts/feeds install -a
+```
+
+## LuCI themes
+
+After installing the feeds, clone both LuCI themes into the OpenWrt
+`package/` directory.
+
+```sh
+git clone https://github.com/botblox/luci-theme-botblox.git package/luci-theme-botblox
+git clone https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
+```
+
+For reproducible builds, check out the exact commit used for each theme.
+These theme checkouts are separate from the feeds pinned in `feeds.buildinfo`.
+
+## Build firmware
+
+Copy the build configuration for your board to `.config`.
+
+| Board | Command |
+| --- | --- |
+| Rugged SOM (BB-SOM-B-1) | `cp bb-diffconfig-ruggedsom .config` |
+| RouterCore top board (BB-RPMTOP-A-1) | `cp bb-diffconfig-routercore .config` |
+
+Run `make defconfig` to expand the board configuration with the defaults for
+this tree. Run `make menuconfig` and select `luci-theme-botblox` and
+`luci-theme-argon` as `<*>` under **LuCI → Themes** to include both in the
+firmware image. To preserve your changes, run `./scripts/diffconfig.sh` and
+save its output to your board's diffconfig file.
+
+Run `make` to download the sources, build the cross-compile toolchain, and
+cross-compile the GNU/Linux kernel and selected applications.
+
 # Rugged SOM release flow
-
-## Quickstart
-
-1. Check out the exact OpenWrt commit associated with the release. Download the
-   `feeds.buildinfo` published with that release and use it as the feed
-   configuration. Its entries pin every feed to the commit used for the
-   release build:
-
-   ```
-   cp /path/to/release/feeds.buildinfo feeds.conf
-   ./scripts/feeds update -a
-   ```
-
-   Do not replace this with an unpinned feed configuration or use a
-   `feeds.buildinfo` from another release. If no release file is available,
-   `feeds.conf.default` is only reproducible when every `src-git` entry ends in
-   an explicit `^<commit>` revision.
-
-2. Install symlinks for the packages from those pinned feeds:
-
-   ```
-   ./scripts/feeds install -a
-   ```
-3. Follow instructions [here](https://github.com/botblox/luci-theme-botblox/blob/master/README.md) to make custom BotBlox Luci theme available
-4. To reproduce a BotBlox build configuration, apply 
-   `bb-diffconfig-ruggedsom` for Rugged SOM, BB-SOM-B-1
-   `bb-diffconfig-routercore` for RouterCore (top board), BB-RPMTOP-A-1
-   instead of selecting options manually in `make menuconfig` (unless you are targeting a specific build)
-
-   ```
-   cp bb-diffconfig-ruggedsom .config
-   make defconfig
-   ```
-
-   `bb-diffconfig-ruggedsom` is generated with `./scripts/diffconfig.sh` and captures the
-   BotBlox-specific OpenWrt configuration delta. `make defconfig` expands this into a full `.config` with the correct defaults for this tree.
-
-5. If you want to adjust after applying `bb-diffconfig-ruggedsom`, run `make menuconfig`. If you make changes and want to preserve them for future reproducible builds, regenerate
-   diffconfig:
-
-   ```
-   ./scripts/diffconfig.sh > bb-diffconfig-ruggedsom
-   ```
-
-6. Run `make` to build your firmware. This will download all sources, build the
-   cross-compile toolchain, and then cross-compile the GNU/Linux kernel & chosen
-   applications.
 
 ## Manual upgrade (U-Boot + TFTP)
 
@@ -132,6 +153,11 @@ We need to add the following to every release.
 In future, we may simplify things by just using a FIT image.
 
 # Routercore release flow
+
+## Flashing RouterCore
+
+To flash RouterCore with the SAM-BA programmer, follow the instructions in the
+[BotBlox SAM-BA repository](https://github.com/botblox/sam-ba).
 
 ## Default login
 
