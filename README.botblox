@@ -13,11 +13,21 @@ If you use another Linux distribution, macOS, or Windows, follow the
 instructions for your platform in the
 [OpenWrt build system setup guide](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem).
 
+## OpenWrt branch
+
+Switch to the BotBlox branch before setting up the feeds.
+
+```sh
+git switch openwrt-25.12-custom
+```
+
+To reproduce a release, then check out the exact OpenWrt commit used for that
+release.
+
 ## Package feeds
 
-To reproduce a release, check out its exact OpenWrt commit and copy the
-`feeds.buildinfo` from that same release to `feeds.conf`. This pins each feed
-to the commit used for the release build.
+When reproducing a release, copy its `feeds.buildinfo` to `feeds.conf`.
+This pins each feed to the commit used for the release build.
 
 ```sh
 cp /path/to/release/feeds.buildinfo feeds.conf
