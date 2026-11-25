@@ -1110,7 +1110,7 @@ index 9437d65a097..ce9ee605586 100644
  CONFIG_SYS_CONSOLE_IS_IN_ENV=y
 diff --git a/configs/sam9x75_routercore_nandflash_defconfig b/configs/sam9x75_routercore_nandflash_defconfig
 new file mode 100644
-index 00000000000..d78482f7869
+index 00000000000..0235aa053dd
 --- /dev/null
 +++ b/configs/sam9x75_routercore_nandflash_defconfig
 @@ -0,0 +1,123 @@
@@ -1142,7 +1142,7 @@ index 00000000000..d78482f7869
 +CONFIG_SD_BOOT=y
 +CONFIG_BOOTDELAY=3
 +CONFIG_USE_BOOTARGS=y
-+CONFIG_BOOTARGS="console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,1M(uboot)ro,256k(env),256k(env_redundant),6400k(fit),-(rootfs) rootfstype=ubifs ubi.mtd=rootfs root=ubi0:rootfs rw atmel.pm_modes=standby,ulp0"
++CONFIG_BOOTARGS="console=ttyS0,115200 initcall_debug ignore_loglevel mtdparts=atmel_nand:256k(bootstrap)ro,1M(uboot)ro,256k(env),256k(env_redundant),6400k(fit),-(rootfs) rootfstype=ubifs ubi.mtd=rootfs root=ubi0:rootfs rw atmel.pm_modes=standby,ulp0"
 +CONFIG_USE_BOOTCOMMAND=y
 +CONFIG_BOOTCOMMAND="nand read 0x22000000 0x1c0000 0x640000; bootm 0x22000000"
 +CONFIG_SYS_CBSIZE=256

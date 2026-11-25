@@ -1,0 +1,137 @@
+Subject: [PATCH] net: dsa: mv88e6xxx: trace switch probe and GPIO reset
+
+Identify each switch and probe task in the RouterCore boot log. Trace
+the reset, IRQ setup and DSA registration stages to locate early boot
+stalls. Keep console writes outside the asserted GPIO pulse.
+
+---
+ drivers/net/dsa/mv88e6xxx/chip.c | 24 +++++++++++++++++++++++-
+ 1 file changed, 23 insertions(+), 1 deletion(-)
+
+--- a/drivers/net/dsa/mv88e6xxx/chip.c
++++ b/drivers/net/dsa/mv88e6xxx/chip.c
+@@ -31,6 +31,7 @@
+ #include <linux/netdevice.h>
+ #include <linux/gpio/consumer.h>
+ #include <linux/phylink.h>
++#include <linux/sched.h>
+ #include <net/dsa.h>
+ 
+ #include "chip.h"
+@@ -3213,17 +3214,21 @@ static void mv88e6xxx_hardware_reset(struct mv88e6xxx_chip *chip)
+ 		 * and post-reset handlers.
+ 		 */
+ 		if (chip->info->ops->hardware_reset_pre) {
++			dev_info(chip->dev, "starting pre-reset hook\n");
+ 			err = chip->info->ops->hardware_reset_pre(chip);
+ 			if (err)
+ 				dev_err(chip->dev, "pre-reset error: %d\n", err);
+ 		}
+ 
++		dev_info(chip->dev, "asserting reset GPIO\n");
+ 		gpiod_set_value_cansleep(gpiod, 1);
+ 		usleep_range(10000, 20000);
+ 		gpiod_set_value_cansleep(gpiod, 0);
++		dev_info(chip->dev, "reset GPIO deassert requested\n");
+ 		usleep_range(10000, 20000);
+ 
+ 		if (chip->info->ops->hardware_reset_post) {
++			dev_info(chip->dev, "starting post-reset hook\n");
+ 			err = chip->info->ops->hardware_reset_post(chip);
+ 			if (err)
+ 				dev_err(chip->dev, "post-reset error: %d\n", err);
+@@ -3254,12 +3259,14 @@ static int mv88e6xxx_switch_reset(struct mv88e6xxx_chip *chip)
+ {
+ 	int err;
+ 
++	dev_info(chip->dev, "disabling ports for reset\n");
+ 	err = mv88e6xxx_disable_ports(chip);
+ 	if (err)
+ 		return err;
+ 
+ 	mv88e6xxx_hardware_reset(chip);
+ 
++	dev_info(chip->dev, "starting software reset\n");
+ 	return mv88e6xxx_software_reset(chip);
+ }
+ 
+@@ -7327,6 +7334,7 @@ static int mv88e6xxx_probe(struct mdio_device *mdiodev)
+ 	if (!compat_info)
+ 		return -EINVAL;
+ 
++	dev_info(dev, "probe start (pid %d)\n", task_pid_nr(current));
+ 	chip = mv88e6xxx_alloc_chip(dev);
+ 	if (!chip) {
+ 		err = -ENOMEM;
+@@ -7340,8 +7348,13 @@ static int mv88e6xxx_probe(struct mdio_device *mdiodev)
+ 		err = PTR_ERR(chip->reset);
+ 		goto out;
+ 	}
+-	if (chip->reset)
++	if (chip->reset) {
++		dev_info(dev, "reset GPIO acquired (%s)\n",
++			 gpiod_is_active_low(chip->reset) ? "active-low" : "active-high");
+ 		usleep_range(10000, 20000);
++	} else {
++		dev_info(dev, "reset GPIO absent\n");
++	}
+ 
+ 	/* Detect if the device is configured in single chip addressing mode,
+ 	 * otherwise continue with address specific smi init/detection.
+@@ -7372,9 +7385,11 @@ static int mv88e6xxx_probe(struct mdio_device *mdiodev)
+ 			chip->eeprom_len = pdata->eeprom_len;
+ 	}
+ 
++	dev_info(dev, "starting switch reset\n");
+ 	mv88e6xxx_reg_lock(chip);
+ 	err = mv88e6xxx_switch_reset(chip);
+ 	mv88e6xxx_reg_unlock(chip);
++	dev_info(dev, "switch reset returned %d\n", err);
+ 	if (err)
+ 		goto out_phy;
+ 
+@@ -7393,6 +7408,7 @@ static int mv88e6xxx_probe(struct mdio_device *mdiodev)
+ 	 * the PHYs will link their interrupts to these interrupt
+ 	 * controllers
+ 	 */
++	dev_info(dev, "setting up global 1 IRQ (irq %d)\n", chip->irq);
+ 	mv88e6xxx_reg_lock(chip);
+ 	if (chip->irq > 0)
+ 		err = mv88e6xxx_g1_irq_setup(chip);
+@@ -7404,23 +7420,28 @@ static int mv88e6xxx_probe(struct mdio_device *mdiodev)
+ 		goto out_phy;
+ 
+ 	if (chip->info->g2_irqs > 0) {
++		dev_info(dev, "setting up global 2 IRQ\n");
+ 		err = mv88e6xxx_g2_irq_setup(chip);
+ 		if (err)
+ 			goto out_g1_irq;
+ 	}
+ 
++	dev_info(dev, "setting up ATU IRQ\n");
+ 	err = mv88e6xxx_g1_atu_prob_irq_setup(chip);
+ 	if (err)
+ 		goto out_g2_irq;
+ 
++	dev_info(dev, "setting up VTU IRQ\n");
+ 	err = mv88e6xxx_g1_vtu_prob_irq_setup(chip);
+ 	if (err)
+ 		goto out_g1_atu_prob_irq;
+ 
++	dev_info(dev, "registering DSA switch\n");
+ 	err = mv88e6xxx_register_switch(chip);
+ 	if (err)
+ 		goto out_g1_vtu_prob_irq;
+ 
++	dev_info(dev, "probe complete (pid %d)\n", task_pid_nr(current));
+ 	return 0;
+ 
+ out_g1_vtu_prob_irq:
+@@ -7441,6 +7462,7 @@ out:
+ 	if (pdata)
+ 		dev_put(pdata->netdev);
+ 
++	dev_info(dev, "probe returned %pe (pid %d)\n", ERR_PTR(err), task_pid_nr(current));
+ 	return err;
+ }
+ 
